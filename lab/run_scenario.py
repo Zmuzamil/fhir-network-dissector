@@ -17,7 +17,10 @@ from urllib.parse import urlsplit
 import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import gen_traffic  # noqa: E402
+
+from fhir_dissector.cli import CAPTURE_SNAPLEN, prepare_scapy_capture  # noqa: E402
 
 
 def wait_ready(base: str, timeout: float = 240.0) -> None:
@@ -42,11 +45,7 @@ def wait_ready(base: str, timeout: float = 240.0) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    # Importing the layer modules registers the link types (e.g. DLT_NULL loopback),
-    # otherwise captured frames are stored as undecodable raw bytes.
-    import scapy.layers.inet  # noqa: F401
-    import scapy.layers.inet6  # noqa: F401
-    import scapy.layers.l2  # noqa: F401
+    prepare_scapy_capture()  # register link types + raise snaplen above 64 KiB
     from scapy.config import conf
     from scapy.sendrecv import AsyncSniffer
     from scapy.utils import wrpcap
@@ -79,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
         packets = sniffer.stop()
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    wrpcap(str(out), packets)
+    wrpcap(str(out), packets, snaplen=CAPTURE_SNAPLEN)
     print(f"Captured {len(packets)} packets -> {out}")
     if len(packets) == 0:
         print("WARNING: no packets captured. Check Npcap loopback support and admin rights.")
