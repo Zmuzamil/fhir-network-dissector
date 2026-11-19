@@ -224,8 +224,8 @@ fhir_dissector/   core package (http_parser, reassembly, detector, classifier, b
 lab/              mock_fhir_server.py, gen_traffic.py, run_scenario.py, evaluate.py
 tests/            pcap_builder.py (synthetic packets) + 6 test files
 captures/         lab.pcap, expected.json, events.jsonl, evaluation reports (PCAP/JSONL git-ignored)
-docs/             TESTING_GUIDE.md, REPORT_SUMMARY.md, LEARNING_NOTES.md
+docs/             FHIR_Dissector_Visual_Guide.pdf, TESTING_GUIDE.md, REPORT_SUMMARY.md, LEARNING_NOTES.md
 .vscode/          settings, tasks, launch configurations, recommended extensions
 ```
 
-See also: [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) (hands-on testing from zero), [docs/REPORT_SUMMARY.md](docs/REPORT_SUMMARY.md) (one-page summary for a report), [docs/LEARNING_NOTES.md](docs/LEARNING_NOTES.md) (what we did and why), [FHIR_DISSECTOR_PLAN.md](FHIR_DISSECTOR_PLAN.md) (original plan).
+See also: [docs/FHIR_Dissector_Visual_Guide.pdf](docs/FHIR_Dissector_Visual_Guide.pdf) (13-page visual guide with diagrams), [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) (hands-on testing from zero), [docs/REPORT_SUMMARY.md](docs/REPORT_SUMMARY.md) (one-page summary for a report), [docs/LEARNING_NOTES.md](docs/LEARNING_NOTES.md) (what we did and why), [FHIR_DISSECTOR_PLAN.md](FHIR_DISSECTOR_PLAN.md) (original plan).
