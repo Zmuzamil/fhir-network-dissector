@@ -8,7 +8,7 @@ packets → TCP reassembly → HTTP/1.1 parsing → FHIR detection → FHIR clas
 
 FHIR is not a binary protocol: it is a REST API on top of HTTP, with JSON or XML *resources* (`Patient`, `Observation`, `Bundle`, …). The dissector rebuilds the HTTP conversation from TCP segments, decides whether it is FHIR (with an explainable confidence score), and labels the FHIR *interaction* (read, search, create, transaction, …).
 
-**Status:** all items of the plan's definition of done are met. 139 automated tests pass. On a real capture against HAPI FHIR, both offline and live: **100% precision, 100% recall, 100% interaction accuracy**, with 0 false positives.
+**Status:** all items of the plan's definition of done are met. 156 automated tests pass. On a real capture against HAPI FHIR, both offline and live: **100% precision, 100% recall, 100% interaction accuracy**, with 0 false positives.
 
 ---
 
@@ -172,12 +172,13 @@ One JSON object per line (JSONL). Example (a real event from the lab, redacted b
 
 ## 5. Test results
 
-**Unit, integration and end-to-end tests:** `pytest` → **139 passed** (no Docker, network or admin rights).
+**Unit, integration and end-to-end tests:** `pytest` → **156 passed** (no Docker, network or admin rights).
 
 | File | Tests | Covers |
 |---|---|---|
 | `test_http_parser.py` | 25 | Content-Length, chunked split at **every byte boundary**, gzip/deflate, HEAD, 204/304, 1xx, 101, until-close, pipelining, oversized headers, random garbage, body cap, gaps |
-| `test_reassembly.py` | 37 | in-order, **shuffled** (10 seeds), **retransmissions + overlaps** (10 seeds), both combined, **missing handshake**, **IPv6**, sequence wrap-around, no FIN, HEAD pairing, two connections, gaps with/without ACK info, RST |
+| `test_reassembly.py` | 40 | in-order, **shuffled** (10 seeds), **retransmissions + overlaps** (10 seeds), both combined, **missing handshake**, **IPv6**, sequence wrap-around, no FIN, HEAD pairing, two connections, gaps with/without ACK info, RST, connection cap / eviction, request-queue cap |
+| `test_frames.py` | 14 | fast raw-frame decoder vs scapy (Ethernet, VLAN, loopback, Linux SLL, raw IP, IPv6 extension headers), non-TCP/fragments ignored, truncation, PCAPNG fallback, new CLI options |
 | `test_classifier.py` | 39 | every row of the interaction table, base detection, operations, compartments, form search, percent-encoding |
 | `test_detector.py` | 20 | each signal weight, non-FHIR cases, threshold, version, redaction, `--all`, IPv6 via scapy |
 | `test_body.py` | 10 | Patient/Bundle/OperationOutcome/CapabilityStatement in JSON and XML, never fails |
@@ -188,14 +189,94 @@ One JSON object per line (JSONL). Example (a real event from the lab, redacted b
 | Run | Calls | TP | FP | FN | TN | Precision | Recall | Interaction accuracy | Resource-type accuracy |
 |---|---|---|---|---|---|---|---|---|---|
 | Offline (`captures/lab.pcap`, 268 packets) | 19 | 17 | 0 | 0 | 2 | **100%** | **100%** | **100%** | **100%** |
-| Live capture (260 packets) | 19 | 17 | 0 | 0 | 2 | **100%** | **100%** | **100%** | **100%** |
+| Live capture, fast decoder (312 packets) | 19 | 17 | 0 | 0 | 2 | **100%** | **100%** | **100%** | **100%** |
 | Mock server (fallback) | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% | 100% |
 
 Interactions covered by the lab: capabilities, create ×3, read ×4 (JSON, XML, 410 Gone, 404), update, history-instance, vread, search-type (GET and POST `_search`), transaction, batch, operation (`$everything`), delete. Non-FHIR: the HAPI HTML home page (1.78 MB) and `/favicon.ico`. Full tables: `captures/evaluation_lab.txt`, `captures/evaluation_live.txt`.
 
+**Robustness and performance** (one CPU core, Windows 11 laptop, Python 3.13):
+
+| Test | Result |
+|---|---|
+| 100,000 random garbage TCP segments | 0 crashes, 0 internal errors |
+| Speed: 26,000 packets / 1,000 connections / 5,000 events | **~26,500 packets/s** with the fast decoder (scapy decoding: ~3,300 packets/s, identical events) |
+| Memory: 20,000 never-closing connections | ~86 MB without a cap; now capped by `--max-connections` (default 10,000, least-recently-active evicted) |
+
 ---
 
-## 6. Limitations
+## 6. Deployment (live use)
+
+### Is it ready?
+
+| Area | Status |
+|---|---|
+| Correctness on plaintext HTTP/1.1 FHIR | ready: 100% in the lab (offline and live), 156 tests |
+| Robustness (garbage, loss, reordering) | ready: fails soft, fuzz-tested |
+| Privacy | ready: redaction on by default; no tokens or resource contents ever written |
+| Resource limits | ready: connections, request queue, body size, header size, out-of-order buffer are all capped |
+| Throughput | fine for one or a few FHIR servers (thousands of packets/s); **not** for multi-Gbit/s core links (single Python process) |
+| **HTTPS / TLS** | **not supported**: encrypted FHIR traffic is invisible (see below) |
+| HTTP/2, WebSocket subscriptions | not supported |
+
+### Where to capture
+
+The dissector only understands **plaintext** HTTP. In practice FHIR is usually served over HTTPS, so capture where the traffic is plaintext:
+- **behind the TLS terminator**: between a reverse proxy / load balancer / API gateway and the FHIR server, or on the FHIR server host itself if it listens on HTTP behind the proxy;
+- on an internal integration network that uses plain HTTP;
+- from a **mirror / SPAN port** of a switch on such a segment (a passive copy of the traffic, which is safest: nothing on the path changes).
+
+Always use a BPF filter for the FHIR port(s), e.g. `--bpf "tcp port 8080"`, so that only relevant packets are processed.
+
+### Install on the monitoring machine
+
+```powershell
+pip install .                      # from the project folder; gives the command `fhir-dissector`
+fhir-dissector live --iface "Ethernet 2" --bpf "tcp port 8080" -o C:\fhir\events.jsonl --quiet
+```
+On Windows, Npcap is required. On Linux/macOS run as root, or give Python the `cap_net_raw,cap_net_admin` capabilities.
+
+### Recommended options for long-running use
+
+| Option | Default | Advice |
+|---|---|---|
+| `-o FILE` | none | always set; live mode **appends**, so a restart keeps old events |
+| `--quiet` | off | set when running as a service (no screen output) |
+| `--bpf` | `tcp` | restrict to the FHIR server's port(s) |
+| `--max-connections` | 10,000 | raise for very busy servers; a WARNING at exit shows evictions |
+| `--max-body` | 10 MB | lower (e.g. 2 MB) to save memory; only metadata is needed, but large Bundles need a full body to be summarised |
+| `--idle-timeout` | 120 s | connections silent for this long are closed and their pending requests emitted |
+
+### Run as a service
+
+**Linux (systemd)**, file `/etc/systemd/system/fhir-dissector.service`:
+```ini
+[Unit]
+Description=HL7 FHIR dissector
+After=network-online.target
+
+[Service]
+ExecStart=/opt/fhir-dissector/.venv/bin/fhir-dissector live --iface eth1 --bpf "tcp port 8080" -o /var/log/fhir/events.jsonl --quiet
+Restart=on-failure
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
+
+[Install]
+WantedBy=multi-user.target
+```
+`systemctl stop` sends SIGTERM; the dissector then flushes open connections and writes its summary before exiting.
+
+**Windows**: run the same command at start-up with Task Scheduler (*Create Task → Run whether user is logged on or not → Run with highest privileges*; trigger *At startup*; action: the `fhir-dissector.exe` path from the venv with the arguments above), or wrap it as a service with a service wrapper such as NSSM.
+
+**Log rotation**: the events file grows (about 0.8 KB per event). Rotate it with `logrotate` (Linux, `copytruncate`) or a scheduled task that renames the file; the dissector re-creates it on restart.
+
+### Privacy and compliance checklist
+
+- Keep redaction **on** (never use `--no-redact` in production).
+- Events still contain IP addresses, resource ids and timestamps, which can be personal data in combination: store the events file with access control, and define a retention period with the data protection officer.
+- Do not store the PCAP files in production; the live mode does not write packets to disk.
+
+---
+
+## 7. Limitations
 
 - **No TLS**: only plaintext HTTP. Real deployments use HTTPS.
 - **No HTTP/2**, and no FHIR Subscriptions over WebSocket (the parser stops at `101 Switching Protocols`).
@@ -206,7 +287,7 @@ Interactions covered by the lab: capabilities, create ×3, read ×4 (JSON, XML, 
 - XML support is basic (resource type, id, meta, Bundle, OperationOutcome, CapabilityStatement).
 - Detection is heuristic: a non-FHIR API using FHIR-like paths *and* a `resourceType` field would be counted as FHIR.
 
-## 7. Future work
+## 8. Future work
 
 - TLS decryption with key log files (`SSLKEYLOGFILE`) or integration with a TLS-terminating proxy.
 - HTTP/2 (HPACK, streams) and WebSocket subscriptions.

@@ -211,7 +211,7 @@ Live events were identical to offline events (same method, interaction, type, FH
 
 ```powershell
 .venv\Scripts\activate                                   # enter the venv
-pytest -q                                                # 139 tests
+pytest -q                                                # 156 tests
 docker compose up -d                                     # start HAPI   | docker compose down = stop
 python lab/run_scenario.py --base http://localhost:8080/fhir --port 8080 --out captures/lab.pcap --expected captures/expected.json
 python -m fhir_dissector pcap captures/lab.pcap -o captures/events.jsonl
@@ -233,3 +233,25 @@ python lab/mock_fhir_server.py --port 8081               # fallback server witho
 - **Kept** the 8 small dissector modules separate on purpose: one file per pipeline step (TCP → HTTP → detect → classify → body → event) is easier to understand than one big file, and it is the plan's layout.
 
 **Check after clean-up:** `pytest -q` → 139 passed (141 minus the smoke test and the removed mock-capture case); `evaluate.py` on the current `captures/lab.pcap` (268 packets, the 13:05 re-capture) → 100% precision, recall, interaction accuracy, PASS.
+
+
+---
+
+## Deployment hardening (after the clean-up)
+
+**Question asked:** "Is the project 100% ready to be deployed live?" **Honest answer:** ready for plaintext HTTP/1.1 FHIR on one or a few servers; not for HTTPS traffic (encrypted, cannot be read) or very fast core links.
+
+**What we measured first:** speed 25k packets/s for the core but only ~3–6k packets/s through scapy (scapy builds a Python object per packet); 20,000 never-closing connections → 86 MB with no limit; 100,000 random packets → 0 crashes.
+
+**What we changed:**
+1. **Memory caps** (`reassembly.py`): max tracked connections (default 10,000; the least recently active one is evicted, its exchanges get the error `evicted`) and max 1,000 unanswered requests per connection (`request-queue-overflow`).
+2. **Fast decoder** (`dissector.decode_frame` + `FhirDissector.process_frame`): reads the IP and TCP headers directly from bytes with `struct`. Supports Ethernet (+VLAN), loopback, Linux SLL/SLL2, raw IP, IPv6 extension headers. Classic PCAP files are read without scapy (`cli.iter_pcap_frames`); live capture on libpcap/Npcap keeps frames raw. Result: **~26,500 packets/s, 8× faster, identical events**. PCAPNG files and unusual link types still use scapy.
+3. **Service-friendly live mode**: `-o` now **appends**, `--quiet` hides screen output, SIGTERM (sent by `systemctl stop`) flushes and exits cleanly.
+4. **Tuning options**: `--max-body`, `--idle-timeout`, `--max-connections` for both `pcap` and `live`.
+5. **Packaging**: `pyproject.toml` → `pip install .` gives the command `fhir-dissector` (it also replaced `pytest.ini`).
+6. **Deployment guide** in README §6: where to capture (behind the TLS terminator / mirror port), service setup (systemd, Task Scheduler), log rotation, privacy checklist.
+7. `docker-compose.yml`: host port configurable with `HAPI_PORT`.
+
+**Problem hit:** during the live re-test every request got **404**. Meaning: HAPI had been stopped, and an Apache web server (`httpd`, not part of the project) was now listening on port 8080. Found with `Get-NetTCPConnection -LocalPort 8080 -State Listen`. Fix: start HAPI on another port with `HAPI_PORT=8090 docker compose up -d`. Live re-test on 8090: 19/19, precision/recall/interaction accuracy 100%, PASS.
+
+**Result:** `pytest -q` → 156 passed.

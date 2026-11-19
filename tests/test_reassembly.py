@@ -165,3 +165,30 @@ def test_gap_inside_response_keeps_pairing() -> None:
     assert [(x.request.target, x.response.status) for x in out] == [("/", 200), ("/favicon.ico", 404)]
     assert out[0].response.truncated and "gap" in out[0].response.errors
     assert out[1].response.body == b"{}" and not out[1].response.truncated
+
+
+def test_max_connections_evicts_least_recent() -> None:
+    r = TcpReassembler(max_connections=3)
+    for port in range(50000, 50005):  # 5 clients each send half a request, never finish
+        r.process(1.0, "10.0.0.1", port, "10.0.0.2", 8080, "S", 100, b"")
+        r.process(1.0, "10.0.0.1", port, "10.0.0.2", 8080, "PA", 101, b"GET /fhir/Patient/1 HTTP/1.1\r\n\r\n")
+    assert len(r.conns) == 3 and r.evicted == 2
+    assert {c.client[1] for c in r.conns.values()} == {50002, 50003, 50004}
+
+
+def test_evicted_connection_reports_its_requests() -> None:
+    r = TcpReassembler(max_connections=1)
+    r.process(1.0, "10.0.0.1", 50000, "10.0.0.2", 8080, "PA", 1, b"GET /fhir/metadata HTTP/1.1\r\n\r\n")
+    out = r.process(2.0, "10.0.0.3", 50001, "10.0.0.2", 8080, "PA", 1, b"GET /fhir/Patient HTTP/1.1\r\n\r\n")
+    assert len(out) == 1 and out[0].request.target == "/fhir/metadata" and "evicted" in out[0].errors
+
+
+def test_request_queue_is_bounded() -> None:
+    from fhir_dissector.reassembly import MAX_QUEUED_REQUESTS
+
+    r = TcpReassembler()
+    data = http_request("GET", "/fhir/Patient/1") * (MAX_QUEUED_REQUESTS + 5)
+    out = r.process(1.0, "10.0.0.1", 50000, "10.0.0.2", 8080, "PA", 1, data)
+    assert len(out) == 5 and all("request-queue-overflow" in x.errors for x in out)
+    conn = next(iter(r.conns.values()))
+    assert len(conn.requests) == MAX_QUEUED_REQUESTS

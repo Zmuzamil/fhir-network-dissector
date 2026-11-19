@@ -10,4 +10,4 @@ Typical use::
 from fhir_dissector.dissector import FhirDissector
 
 __all__ = ["FhirDissector"]
-__version__ = "0.1.0"
+__version__ = "0.2.0"

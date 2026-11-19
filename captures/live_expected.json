@@ -29,7 +29,7 @@
   {
     "index": 4,
     "method": "GET",
-    "path": "/fhir/Patient/1010",
+    "path": "/fhir/Patient/1000",
     "expected_interaction": "read",
     "expected_resource_type": "Patient",
     "is_fhir": true,
@@ -38,7 +38,7 @@
   {
     "index": 5,
     "method": "GET",
-    "path": "/fhir/Patient/1010",
+    "path": "/fhir/Patient/1000",
     "expected_interaction": "read",
     "expected_resource_type": "Patient",
     "is_fhir": true,
@@ -47,7 +47,7 @@
   {
     "index": 6,
     "method": "PUT",
-    "path": "/fhir/Patient/1010",
+    "path": "/fhir/Patient/1000",
     "expected_interaction": "update",
     "expected_resource_type": "Patient",
     "is_fhir": true,
@@ -56,7 +56,7 @@
   {
     "index": 7,
     "method": "GET",
-    "path": "/fhir/Patient/1010/_history",
+    "path": "/fhir/Patient/1000/_history",
     "expected_interaction": "history-instance",
     "expected_resource_type": "Patient",
     "is_fhir": true,
@@ -65,7 +65,7 @@
   {
     "index": 8,
     "method": "GET",
-    "path": "/fhir/Patient/1010/_history/1",
+    "path": "/fhir/Patient/1000/_history/1",
     "expected_interaction": "vread",
     "expected_resource_type": "Patient",
     "is_fhir": true,
@@ -119,7 +119,7 @@
   {
     "index": 14,
     "method": "GET",
-    "path": "/fhir/Patient/1010/$everything",
+    "path": "/fhir/Patient/1000/$everything",
     "expected_interaction": "operation",
     "expected_resource_type": "Patient",
     "is_fhir": true,
@@ -128,7 +128,7 @@
   {
     "index": 15,
     "method": "DELETE",
-    "path": "/fhir/Observation/1012",
+    "path": "/fhir/Observation/1002",
     "expected_interaction": "delete",
     "expected_resource_type": "Observation",
     "is_fhir": true,
@@ -137,7 +137,7 @@
   {
     "index": 16,
     "method": "GET",
-    "path": "/fhir/Observation/1012",
+    "path": "/fhir/Observation/1002",
     "expected_interaction": "read",
     "expected_resource_type": "Observation",
     "is_fhir": true,

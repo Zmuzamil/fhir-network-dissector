@@ -17,7 +17,7 @@ To build a modular protocol dissector module that **detects HL7 FHIR exchanges**
 
 Offline and live modes share the same code path.
 
-**Verification.** 139 automated tests run without Docker, network or privileges. They use synthetic TCP conversations with shuffled and duplicated segments, missing handshakes, IPv6, sequence wrap-around and lost segments. The real captures are scored by an evaluator that matches events to ground truth on (method, path, status).
+**Verification.** 156 automated tests run without Docker, network or privileges. They use synthetic TCP conversations with shuffled and duplicated segments, missing handshakes, IPv6, sequence wrap-around and lost segments. The real captures are scored by an evaluator that matches events to ground truth on (method, path, status).
 
 ## Results
 
@@ -27,7 +27,7 @@ Offline and live modes share the same code path.
 | Live capture (HAPI, 260 packets) | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% |
 | Offline PCAP (mock server) | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% |
 
-Resource-type accuracy was also 100%, and live events were identical to the offline events. The default output contained none of the synthetic patient data (names, birth dates, telephone numbers, search values, server diagnostics). The real HAPI traffic was IPv6 loopback with gzip-compressed, chunked responses.
+Resource-type accuracy was also 100%, and live events were identical to the offline events. Robustness and cost: 100,000 random TCP segments caused no failure; a raw-frame decoder processes about 26,500 packets/s on one CPU core (8 times faster than generic scapy decoding, with identical output); memory is bounded by caps on tracked connections, queued requests, buffered out-of-order data and stored body size. The default output contained none of the synthetic patient data (names, birth dates, telephone numbers, search values, server diagnostics). The real HAPI traffic was IPv6 loopback with gzip-compressed, chunked responses.
 
 The lab surfaced one capture artefact worth reporting. Loopback TCP segments reached 65,475 data bytes (65,539-byte frames), which exceeded the default 65,535-byte capture/read limit of the capture library and silently cut 4 bytes from large frames. The dissector's ACK-based gap recovery kept request/response pairing correct in that case. The lab tools now capture, write and read with a 262,144-byte limit.
 

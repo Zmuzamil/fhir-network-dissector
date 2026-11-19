@@ -8,7 +8,7 @@ queue; each parsed response is paired with the oldest waiting request.
 """
 from __future__ import annotations
 
-from collections import deque
+from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -17,6 +17,8 @@ from fhir_dissector.http_parser import DEFAULT_MAX_BODY, HTTP_METHODS, HttpMessa
 SEQ_MOD = 1 << 32
 MAX_PENDING_SEGMENTS = 1000
 MAX_PENDING_BYTES = 4 * 1024 * 1024
+MAX_QUEUED_REQUESTS = 1000  # unanswered requests kept per connection
+DEFAULT_MAX_CONNECTIONS = 10_000  # tracked connections (memory bound)
 _METHOD_PREFIXES = tuple(m.encode() + b" " for m in HTTP_METHODS)
 
 Endpoint = tuple[str, int]
@@ -196,6 +198,9 @@ class Connection:
         for m in msgs:
             if d is self.c2s:
                 self.requests.append(m)
+                if len(self.requests) > MAX_QUEUED_REQUESTS:  # server never answers: bound memory
+                    out.append(Exchange(self.client, self.server, self.requests.popleft(), None,
+                                        ["request-queue-overflow"]))
             else:
                 req = self.requests.popleft() if self.requests else None
                 errors = self._take_errors()
@@ -244,16 +249,21 @@ class TcpReassembler:
         max_body: per-message stored body cap (bytes).
         idle_timeout: drop connections idle for this many seconds (``None`` = never).
         check_every: how often (in packets) to look for idle connections.
+        max_connections: upper bound on tracked connections; when reached, the least
+            recently active connection is closed (its exchanges get the error ``evicted``).
     """
 
     def __init__(self, max_body: int = DEFAULT_MAX_BODY, idle_timeout: Optional[float] = 120.0,
-                 check_every: int = 1000) -> None:
+                 check_every: int = 1000, max_connections: int = DEFAULT_MAX_CONNECTIONS) -> None:
         self.max_body = max_body
         self.idle_timeout = idle_timeout
         self.check_every = check_every
-        self.conns: dict[tuple[Endpoint, Endpoint], Connection] = {}
+        self.max_connections = max(1, max_connections)
+        # Ordered by last activity (oldest first), so eviction is O(1).
+        self.conns: OrderedDict[tuple[Endpoint, Endpoint], Connection] = OrderedDict()
         self.packets = 0
         self.connections_seen = 0
+        self.evicted = 0
 
     def _lookup(self, src: Endpoint, dst: Endpoint) -> Optional[Connection]:
         return self.conns.get((src, dst)) or self.conns.get((dst, src))
@@ -283,15 +293,27 @@ class TcpReassembler:
             if client is None:
                 return out
             server = b if client == a else a
+            while len(self.conns) >= self.max_connections:
+                out += self._evict_oldest(ts)
             conn = Connection(client, server, self.max_body, ts)
             self.conns[(client, server)] = conn
             self.connections_seen += 1
+        else:
+            self.conns.move_to_end((conn.client, conn.server))
         out += conn.handle(a, flags, seq, payload, ts, ack)
         if conn.finished:
             out += conn.close(ts)
             self._remove(conn)
         if self.idle_timeout is not None and self.packets % self.check_every == 0:
             out += self.expire(ts)
+        return out
+
+    def _evict_oldest(self, ts: float) -> list[Exchange]:
+        _, conn = self.conns.popitem(last=False)
+        self.evicted += 1
+        out = conn.close(ts)
+        for ex in out:
+            ex.errors.append("evicted")
         return out
 
     def expire(self, now: float) -> list[Exchange]:
