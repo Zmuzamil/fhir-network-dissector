@@ -69,3 +69,79 @@ python -c "from scapy.config import conf; print(conf.use_npcap, conf.loopback_na
 - `py -3.10 -m venv .venv` → *"No suitable Python runtime found"*. Meaning: the `py` launcher does not know a Python 3.10 (the `python` 3.10 on this PC is not registered with the launcher). Fix: use `py -m venv .venv`, which picks Python 3.13. The plan only needs 3.10 or newer.
 - `docker info` → *"failed to connect to the docker API ... dockerDesktopLinuxEngine"*. Meaning: Docker is installed but the Docker Desktop app (the "engine") is not running. Fix: open Docker Desktop and wait for "Engine running".
 - git warning *"LF will be replaced by CRLF"*. Meaning: Windows and Linux end text lines differently; git converts automatically. Harmless. We added `.gitattributes` so line endings are handled consistently.
+
+---
+
+## Phase 2 — Lab traffic and capture
+
+**What:** Built the "lab": `lab/mock_fhir_server.py` (tiny FHIR server in pure Python, port 8081), `lab/gen_traffic.py` (19 scripted calls: 17 FHIR + 2 non-FHIR, writes `captures/expected.json`), `lab/run_scenario.py` (capture → traffic → save `captures/lab.pcap`).
+
+**Why:** We have no hospital network. A scripted client against a real FHIR server (HAPI) gives realistic traffic *and* an answer key (`expected.json`) to measure the dissector against. `actual_status` in that file is what the client really got, so it does not depend on the dissector.
+
+**Commands:**
+```powershell
+docker compose up -d                                   # start HAPI (first time downloads the image)
+curl.exe http://localhost:8080/fhir/metadata           # is HAPI ready? (JSON CapabilityStatement)
+python lab/run_scenario.py --base http://localhost:8080/fhir --port 8080 --out captures/lab.pcap
+# fallback without Docker:
+python lab/mock_fhir_server.py --port 8081             # terminal 1
+python lab/run_scenario.py --base http://localhost:8081/fhir --out captures/mock_lab.pcap --expected captures/mock_expected.json
+```
+
+**Things we learned:**
+- On this PC, Npcap is configured with `AdminOnly = 0`, so **capture works without admin rights**.
+- `localhost` resolves to the IPv6 address `::1` first, so the lab traffic is IPv6. The mock server listens on IPv4 *and* IPv6 to avoid a slow fallback.
+- HAPI (v8.12.0, FHIR R4 4.0.1) answers with `Content-Encoding: gzip` + `Transfer-Encoding: chunked` and an empty reason phrase (`HTTP/1.1 200 `). Good real-world test material.
+- The gen script never follows redirects, so 1 call = 1 request/response on the wire.
+
+**Problems hit:**
+- *"Unable to guess datalink type (linktype=0)"*: the Npcap loopback adapter uses a 4-byte "NULL/Loopback" header (link type 0). scapy only knows it after importing its layer modules. Fix: import `scapy.layers.l2/inet/inet6` before sniffing.
+
+## Phase 3 — HTTP parser and TCP reassembly
+
+**What:** `fhir_dissector/http_parser.py` (incremental HTTP/1.1 state machine), `fhir_dissector/reassembly.py` (TCP stream reassembly + request/response pairing), `tests/pcap_builder.py` (fake TCP conversations), `tests/test_http_parser.py`, `tests/test_reassembly.py`.
+
+**Key ideas:**
+- **Sequence number**: TCP numbers every byte. `offset = seq - ISN` (ISN = initial sequence number from the SYN) tells where a segment's bytes belong in the stream.
+- **Out-of-order**: a segment from "the future" waits in a buffer until the missing bytes before it arrive.
+- **Retransmission**: a segment we already have is dropped; a partly-new one is trimmed.
+- **ACK number**: the receiver says "I have everything up to byte N". If it ACKs bytes *we never saw*, the capture lost them → we skip the hole immediately instead of waiting forever.
+- **Pairing**: HTTP/1.1 answers requests in order, so each response is matched with the oldest unanswered request (FIFO queue).
+- **Resync**: after garbage or a hole, the parser skips bytes until something that looks like `GET /x HTTP/1.1` or `HTTP/1.1 200`.
+
+**Commands:**
+```powershell
+pytest -q                    # 63 passed
+pytest tests/test_reassembly.py -v
+```
+
+**Problems hit (and fixes):**
+1. *Test bug*: the HEAD test's fake callback said "HEAD" for every response. Fixed the test to answer per request.
+2. *Resync too strict*: after a hole, the next message begins right after lost body bytes (no newline before it). Fix: search for the start-line pattern anywhere, not only at a line start.
+3. *Gap waited forever*: with a lost segment, the reassembler waited for 1000 segments → responses paired with wrong requests. Fix: use the peer's ACK number to detect bytes lost by the capture and skip at once. We added `ack` as an **optional** last argument of `process_tcp(...)` (the plan's signature still works).
+4. *Real capture — 4 bytes missing per big packet*: on loopback, TCP segments reach 65,475 data bytes → frames of 65,539 bytes. scapy captures **and reads** with a limit (*snaplen*) of 65,535 bytes, so 4 bytes were cut. Effect: a hole inside the 1.78 MB HTML page, and the next response (`favicon.ico` 404) was paired with `GET /`. Fixes:
+   - Dissector: on a hole, emit the *partial* message (marked `truncated`, error `gap`) so pairing stays correct; count each hole once.
+   - Capture: raise scapy's snaplen to 262,144 (`fhir_dissector.cli.prepare_scapy_capture`), write the PCAP with `snaplen=262144`, and read with `read_packet(size=262144)`.
+   Result: 19/19 exchanges, 0 truncated packets, 0 errors.
+
+## Phase 4 — FHIR logic and public API
+
+**What:** `classifier.py` (URL + method → interaction), `detector.py` (is it FHIR? score 0–1 with named *signals*), `body.py` (metadata-only summary of JSON/XML bodies), `events.py` (event JSON + redaction), `dissector.py` (`FhirDissector` public API), `cli.py` (`pcap` and `live` commands). Tests: `test_classifier.py`, `test_detector.py`, `test_body.py`.
+
+**Key ideas:**
+- **Classifier** works on path *segments*: it finds the first segment that is a FHIR resource type (`Patient`), `metadata`, `_history` or `$operation`. What comes before is the *base* (`/fhir`). The rest decides the interaction using the table in the plan (§5.4).
+- **Detector** adds weights of the clues it finds, e.g. `content-type` (0.6) + `resourceType-body` (0.5) → capped at 1.0. FHIR if ≥ 0.5. The list of signals explains *why* (explainability).
+- **Redaction** (privacy): by default we keep search parameter *names* but not their *values* (`family`, not `family=Rossi`), never keep tokens, never copy resource contents.
+- **FHIR version**: HAPI only reports it in `/metadata` (CapabilityStatement `fhirVersion`). The dissector remembers it per server and adds it to later events of the same server.
+
+**Commands:**
+```powershell
+python -m fhir_dissector pcap captures/lab.pcap -o captures/events.jsonl        # FHIR events only
+python -m fhir_dissector pcap captures/lab.pcap --all                           # + non-FHIR, printed
+python -m fhir_dissector pcap captures/lab.pcap --no-redact                     # keeps search values
+pytest -q                                                                        # 132 passed
+```
+
+**Result on the HAPI capture:** 19 HTTP exchanges → 17 FHIR events (all interactions right, confidence 1.0), 2 non-FHIR (score 0.0). Redaction check: `Rossi`, `Mario`, `1980`, `+39`, `diagnostics`, `Bearer` appear **0 times** in default output.
+
+**Problems hit:** none in tests (132/132 first run). One bug caught while writing: in `detector.py`, `request.target or "" if request else ""` is parsed by Python as `request.target or ("" if request else "")` and would crash when there is no request. Fixed with brackets.
