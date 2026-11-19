@@ -145,3 +145,42 @@ pytest -q                                                                       
 **Result on the HAPI capture:** 19 HTTP exchanges → 17 FHIR events (all interactions right, confidence 1.0), 2 non-FHIR (score 0.0). Redaction check: `Rossi`, `Mario`, `1980`, `+39`, `diagnostics`, `Bearer` appear **0 times** in default output.
 
 **Problems hit:** none in tests (132/132 first run). One bug caught while writing: in `detector.py`, `request.target or "" if request else ""` is parsed by Python as `request.target or ("" if request else "")` and would crash when there is no request. Fixed with brackets.
+
+## Phase 5 — Evaluation and live mode
+
+**What:** `lab/evaluate.py` (compares dissector output with `expected.json`) and `tests/test_end_to_end.py` (synthetic PCAP → CLI → events; plus the real lab capture when present).
+
+**Key ideas:**
+- **Ground truth**: `expected.json` was written by the *client* while generating traffic, so it does not depend on the dissector.
+- **Matching**: each expected call is matched to an event with the same `(method, path without query, status)`.
+- **Metrics**:
+  - *precision* = TP / (TP + FP): of all calls we said were FHIR, how many really were? (FP = false alarm)
+  - *recall* = TP / (TP + FN): of all real FHIR calls, how many did we find? (FN = missed)
+  - *interaction accuracy*: share of FHIR calls with the right interaction label.
+- **Live mode** uses the *same* code path as PCAP mode (`process_packet`), only the packet source differs (`sniff` instead of `PcapReader`).
+
+**Commands:**
+```powershell
+python lab/evaluate.py --pcap captures/lab.pcap --expected captures/expected.json
+# live test (two terminals):
+python -m fhir_dissector live --bpf "tcp port 8080" --all -o captures/live_events.jsonl   # terminal 1
+python lab/gen_traffic.py --base http://localhost:8080/fhir --out captures/live_expected.json   # terminal 2
+# then Ctrl+C in terminal 1, and:
+python lab/evaluate.py --events captures/live_events.jsonl --expected captures/live_expected.json
+pytest -q      # 141 passed
+```
+
+**Results (HAPI FHIR 8.12.0, FHIR 4.0.1):**
+
+| Run | Calls | TP | FP | FN | TN | Precision | Recall | Interaction acc. |
+|---|---|---|---|---|---|---|---|---|
+| Offline PCAP (`lab.pcap`) | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% |
+| Live capture | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% |
+| Mock server PCAP | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% |
+
+Live events were identical to offline events (same method, interaction, type, FHIR flag and status for all 19 calls).
+
+**Notes:**
+- A live run needs its *own* expected file (new traffic → new resource ids), so we wrote `captures/live_expected.json`.
+- `--timeout N` was added to `live` so a live run can stop by itself (handy for scripts and tests).
+- No mismatches had to be fixed in this phase: the evaluator passed on the first run, because the gap/snaplen problems were already solved in Phase 3.
