@@ -1,0 +1,5 @@
+# Runtime: packet reading, live sniffing, PCAP writing
+scapy>=2.5
+# Lab / tests
+requests>=2.31
+pytest>=7.4

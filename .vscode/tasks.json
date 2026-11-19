@@ -1,0 +1,36 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start HAPI",
+      "type": "shell",
+      "command": "docker compose up -d",
+      "problemMatcher": []
+    },
+    {
+      "label": "Stop HAPI",
+      "type": "shell",
+      "command": "docker compose down",
+      "problemMatcher": []
+    },
+    {
+      "label": "Run tests",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe -m pytest -q",
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Run scenario (needs admin)",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe lab/run_scenario.py --base http://localhost:8080/fhir --port 8080 --out captures/lab.pcap",
+      "problemMatcher": []
+    },
+    {
+      "label": "Evaluate",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe lab/evaluate.py --pcap captures/lab.pcap --expected captures/expected.json",
+      "problemMatcher": []
+    }
+  ]
+}
