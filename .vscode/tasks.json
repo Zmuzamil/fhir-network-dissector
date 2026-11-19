@@ -15,21 +15,36 @@
     },
     {
       "label": "Run tests",
-      "type": "shell",
-      "command": "${workspaceFolder}/.venv/Scripts/python.exe -m pytest -q",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "args": ["-m", "pytest", "-q"],
+      "options": { "cwd": "${workspaceFolder}" },
       "group": { "kind": "test", "isDefault": true },
       "problemMatcher": []
     },
     {
-      "label": "Run scenario (needs admin)",
-      "type": "shell",
-      "command": "${workspaceFolder}/.venv/Scripts/python.exe lab/run_scenario.py --base http://localhost:8080/fhir --port 8080 --out captures/lab.pcap",
+      "label": "Run scenario",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "args": ["lab/run_scenario.py", "--base", "http://localhost:8080/fhir", "--port", "8080",
+               "--out", "captures/lab.pcap", "--expected", "captures/expected.json"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Dissect lab PCAP",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "args": ["-m", "fhir_dissector", "pcap", "captures/lab.pcap", "-o", "captures/events.jsonl"],
+      "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": []
     },
     {
       "label": "Evaluate",
-      "type": "shell",
-      "command": "${workspaceFolder}/.venv/Scripts/python.exe lab/evaluate.py --pcap captures/lab.pcap --expected captures/expected.json",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "args": ["lab/evaluate.py", "--pcap", "captures/lab.pcap", "--expected", "captures/expected.json"],
+      "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": []
     }
   ]

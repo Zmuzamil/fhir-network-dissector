@@ -184,3 +184,40 @@ Live events were identical to offline events (same method, interaction, type, FH
 - A live run needs its *own* expected file (new traffic → new resource ids), so we wrote `captures/live_expected.json`.
 - `--timeout N` was added to `live` so a live run can stop by itself (handy for scripts and tests).
 - No mismatches had to be fixed in this phase: the evaluator passed on the first run, because the gap/snaplen problems were already solved in Phase 3.
+
+## Phase 6 — Integration and documentation
+
+**What:** Phase 0 found no existing framework, so the "wire into the framework" step is skipped. The integration point is `FhirDissector.process_tcp(...)` / `process_packet(...)`, documented with an example in `README.md`. We wrote `README.md`, `TESTING_GUIDE.md`, `REPORT_SUMMARY.md`, finished these notes, and checked the VS Code configuration.
+
+**Problems hit:**
+- *VS Code tasks and paths with spaces*: the project path contains a space (`Packet dissector FHIR`). A `"type": "shell"` task with the Python path inside the command string would be split at the space by PowerShell. Fix: Python tasks use `"type": "process"` (runs the program directly, with the arguments as a list).
+- *Invalid `\escape` in JSON*: writing `\` through the shell turned it into a single `\`, which is not valid JSON. Fix: use forward slashes (`${workspaceFolder}/.venv/Scripts/python.exe`), which VS Code accepts on Windows.
+- We checked every `"process"` task by running it exactly as VS Code would: `Run tests` → 141 passed, `Dissect lab PCAP` → OK, `Evaluate` → PASS.
+
+---
+
+## Final summary — what to remember
+
+1. **FHIR = HTTP + JSON/XML resources.** To see it on the wire you must rebuild TCP streams, then parse HTTP, then interpret URLs and bodies.
+2. **TCP reassembly** uses sequence numbers (where bytes go), ACK numbers (what the other side got), and SYN/FIN/RST (start/end).
+3. **HTTP framing** decides where one message ends: `Content-Length`, `chunked`, or "until the connection closes". Compression (`gzip`) is undone after de-chunking.
+4. **Detection** is a weighted list of clues with a threshold. The signal list makes every decision explainable.
+5. **Classification** maps method + URL segments to the FHIR interaction (`GET Patient/1` = read, `POST [base]` with a transaction Bundle = transaction, …).
+6. **Privacy by default**: names of search parameters yes, values no. Tokens and resource contents never.
+7. **Evaluation** needs ground truth produced independently of the tool (`expected.json` from the client), and the standard metrics precision, recall and accuracy.
+8. **Real captures have surprises**: here, 64 KB loopback segments exceeded the default snaplen. Tests with synthetic packets would not have found it; the real lab run did.
+
+### Full command cheat-sheet (Windows)
+
+```powershell
+.venv\Scripts\activate                                   # enter the venv
+pytest -q                                                # 141 tests
+docker compose up -d                                     # start HAPI   | docker compose down = stop
+python lab/run_scenario.py --base http://localhost:8080/fhir --port 8080 --out captures/lab.pcap --expected captures/expected.json
+python -m fhir_dissector pcap captures/lab.pcap -o captures/events.jsonl
+python lab/evaluate.py --pcap captures/lab.pcap --expected captures/expected.json
+python -m fhir_dissector live --bpf "tcp port 8080" --all -o captures/live_events.jsonl
+python lab/gen_traffic.py --base http://localhost:8080/fhir --out captures/live_expected.json
+python lab/evaluate.py --events captures/live_events.jsonl --expected captures/live_expected.json
+python lab/mock_fhir_server.py --port 8081               # fallback server without Docker
+```
