@@ -41,10 +41,6 @@ def _search_params(params: list[tuple[str, str]], redact: bool) -> list[str]:
     return [f"{k}={v}" for k, v in params]
 
 
-def _bundle(summary: dict[str, Any]) -> Optional[dict[str, Any]]:
-    return summary.get("bundle")
-
-
 def build_event(
     ex: Exchange,
     cls: dict[str, Any],
@@ -101,7 +97,7 @@ def build_event(
             "body_size": req.body_size,
             "auth": _auth(req),
             "resource_type": req_summary.get("resource_type"),
-            "bundle": _bundle(req_summary),
+            "bundle": req_summary.get("bundle"),
         }
     if resp:
         event["response"] = {
@@ -109,7 +105,7 @@ def build_event(
             "content_type": resp.headers.get("content-type"),
             "body_size": resp.body_size,
             "resource_type": resp_summary.get("resource_type"),
-            "bundle": _bundle(resp_summary),
+            "bundle": resp_summary.get("bundle"),
             "outcome_issues": resp_summary.get("outcome_issues", []),
         }
     return event

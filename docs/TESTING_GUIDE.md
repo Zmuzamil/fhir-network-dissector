@@ -27,9 +27,9 @@ python --version
 ```powershell
 pytest -q
 ```
-**You should see:** `141 passed in ~3s`.
+**You should see:** `139 passed in ~3s`.
 **Meaning:** the parser, reassembly, classifier, detector, body summary, redaction and the end-to-end path all work on synthetic packets, including shuffled packets, duplicated packets, IPv6 and missing handshakes.
-*If `captures/lab.pcap` does not exist yet, 1–2 tests show as `skipped`. That is normal.*
+*If `captures/lab.pcap` does not exist yet, 1 test shows as `skipped`. That is normal.*
 
 ---
 
@@ -199,7 +199,7 @@ python lab/evaluate.py --pcap captures/mock_lab.pcap --expected captures/mock_ex
 
 - *Terminal → Run Task…* → `Run tests`, `Start HAPI`, `Run scenario`, `Dissect lab PCAP`, `Evaluate`, `Stop HAPI`.
 - *Run and Debug* (Ctrl+Shift+D) → pick e.g. **Dissect lab PCAP** → press F5. Put a breakpoint in `fhir_dissector/classifier.py` → `classify()` to watch each request being classified.
-- *Testing* panel (flask icon) → shows all 141 tests. Click ▶ to run.
+- *Testing* panel (flask icon) → shows all 139 tests. Click ▶ to run.
 
 ---
 
@@ -219,10 +219,11 @@ docker compose down
 | `.venv\Scripts\activate cannot be loaded because running scripts is disabled` | PowerShell blocks scripts by default | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, or use `.venv\Scripts\python.exe` instead of `python` |
 | `failed to connect to the docker API ... dockerDesktopLinuxEngine` | Docker Desktop is not running | Start Docker Desktop, wait for "Engine running" |
 | `Waiting for FHIR server ... (ConnectionError)` | HAPI is still starting (Java takes time) | Wait; `docker compose logs -f hapi` shows progress ("Started Application") |
+| Browser shows an error or 404 at `/fhir/metadata` although `docker compose ps` says `Up` | The container just (re)started; Java/HAPI needs 1–2 min before the FHIR API answers | Wait and reload; `docker compose logs --tail 20 hapi` shows `fhirtest.access` lines once it serves requests |
 | Port 8080 already in use | Another program uses 8080 | Stop it, or change `"8080:8080"` to `"8090:8080"` in `docker-compose.yml` and use `--base http://localhost:8090/fhir --port 8090` |
 | `Cannot start capture` / `Sniffer did not start` / `0 packets` | No permission to capture, or Npcap without loopback support | Run the terminal **as Administrator**; reinstall Npcap with *"Support loopback traffic"* ticked |
 | `WARNING: N packets were cut by the capture snaplen` | A capture tool saved packets shorter than they were | Capture with `run_scenario.py` (raises the limit), or in Wireshark keep the default snaplen (262144) |
 | Evaluator shows `MISMATCH` with `-` in "got" | The event was not found: wrong PCAP for this `expected.json` (e.g. ids from another run) | Always use the `expected.json` written in the **same** run as the PCAP |
-| `pytest` shows `skipped` | `captures/lab.pcap` or `mock_lab.pcap` is missing | Normal; run Step 3 / Step 9 to create them |
+| `pytest` shows `skipped` | `captures/lab.pcap` is missing | Normal; run Step 3 to create it |
 | Live mode prints nothing | Wrong interface or filter, or traffic went to another port | Use `--bpf "tcp port 8080"`; check the server port; default interface is loopback |
 | `UnicodeEncodeError` when printing | Old console code page | Use `-o file.jsonl` instead of printing, or `chcp 65001` |

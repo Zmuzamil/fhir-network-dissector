@@ -17,13 +17,13 @@ To build a modular protocol dissector module that **detects HL7 FHIR exchanges**
 
 Offline and live modes share the same code path.
 
-**Verification.** 141 automated tests run without Docker, network or privileges. They use synthetic TCP conversations with shuffled and duplicated segments, missing handshakes, IPv6, sequence wrap-around and lost segments. The real captures are scored by an evaluator that matches events to ground truth on (method, path, status).
+**Verification.** 139 automated tests run without Docker, network or privileges. They use synthetic TCP conversations with shuffled and duplicated segments, missing handshakes, IPv6, sequence wrap-around and lost segments. The real captures are scored by an evaluator that matches events to ground truth on (method, path, status).
 
 ## Results
 
 | Run | Calls | TP | FP | FN | TN | Precision | Recall | Interaction accuracy |
 |---|---|---|---|---|---|---|---|---|
-| Offline PCAP (HAPI, 265 packets) | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% |
+| Offline PCAP (HAPI, 268 packets) | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% |
 | Live capture (HAPI, 260 packets) | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% |
 | Offline PCAP (mock server) | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% |
 

@@ -121,7 +121,6 @@ def main(argv: list[str] | None = None) -> int:
     src.add_argument("--pcap", help="capture to dissect")
     src.add_argument("--events", help="existing events JSONL (e.g. from live mode with --all)")
     ap.add_argument("--expected", default="captures/expected.json")
-    ap.add_argument("--json", help="also write the full report as JSON to this file")
     args = ap.parse_args(argv)
 
     expected = json.loads(Path(args.expected).read_text(encoding="utf-8"))
@@ -131,8 +130,6 @@ def main(argv: list[str] | None = None) -> int:
         events = load_events(args.events)
     rep = evaluate(events, expected)
     print_report(rep)
-    if args.json:
-        Path(args.json).write_text(json.dumps(rep, indent=2), encoding="utf-8")
     return 0 if rep["all_ok"] else 1
 
 

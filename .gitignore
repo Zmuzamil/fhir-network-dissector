@@ -5,5 +5,3 @@ __pycache__/
 captures/*.pcap
 captures/*.pcapng
 captures/*.jsonl
-captures/mock_*
-captures/evaluation_*.json

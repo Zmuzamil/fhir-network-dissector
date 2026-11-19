@@ -9,17 +9,17 @@ from __future__ import annotations
 
 import gzip
 import json
-import sys
 from pathlib import Path
 
 import pytest
 
+from fhir_dissector import FhirDissector
+from fhir_dissector.cli import dissect_pcap
 from fhir_dissector.cli import main as cli_main
-from tests.pcap_builder import build_conversation, http_request, http_response, write_pcap
+from lab import evaluate
+from tests.pcap_builder import build_conversation, http_request, http_response, tcp_tuples, write_pcap
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "lab"))
-import evaluate  # noqa: E402
 
 FJ = {"Content-Type": "application/fhir+json;charset=UTF-8"}
 ACC = {"Accept": "application/fhir+json"}
@@ -127,8 +127,6 @@ def test_evaluator_detects_mismatch() -> None:
     rep = evaluate.evaluate(events, exp)
     assert not rep["all_ok"] and rep["recall"] == 0.0
     wrong = dict(exp[0], expected_interaction="read")
-    from fhir_dissector import FhirDissector
-    from tests.pcap_builder import tcp_tuples
     d = FhirDissector(emit_non_fhir=True)
     for t in tcp_tuples(build_conversation([(SCENARIO[0][0], SCENARIO[0][1])])):
         events += d.process_tcp(*t)
@@ -137,15 +135,10 @@ def test_evaluator_detects_mismatch() -> None:
     assert not rep["all_ok"] and rep["interaction_accuracy"] == 0.0
 
 
-@pytest.mark.parametrize("pcap_name, expected_name", [("lab.pcap", "expected.json"),
-                                                       ("mock_lab.pcap", "mock_expected.json")])
-def test_real_lab_capture(pcap_name: str, expected_name: str) -> None:
-    pcap, exp = ROOT / "captures" / pcap_name, ROOT / "captures" / expected_name
+def test_real_lab_capture() -> None:
+    pcap, exp = ROOT / "captures" / "lab.pcap", ROOT / "captures" / "expected.json"
     if not (pcap.is_file() and exp.is_file()):
-        pytest.skip(f"{pcap_name} / {expected_name} not present (run lab/run_scenario.py first)")
-    from fhir_dissector import FhirDissector
-    from fhir_dissector.cli import dissect_pcap
-
+        pytest.skip("captures/lab.pcap or expected.json missing (run lab/run_scenario.py first)")
     events = dissect_pcap(pcap, FhirDissector(emit_non_fhir=True))
     rep = evaluate.evaluate(events, json.loads(exp.read_text(encoding="utf-8")))
     assert rep["all_ok"], [r for r in rep["rows"] if not r["ok"]]

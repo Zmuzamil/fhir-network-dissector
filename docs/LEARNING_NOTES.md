@@ -211,7 +211,7 @@ Live events were identical to offline events (same method, interaction, type, FH
 
 ```powershell
 .venv\Scripts\activate                                   # enter the venv
-pytest -q                                                # 141 tests
+pytest -q                                                # 139 tests
 docker compose up -d                                     # start HAPI   | docker compose down = stop
 python lab/run_scenario.py --base http://localhost:8080/fhir --port 8080 --out captures/lab.pcap --expected captures/expected.json
 python -m fhir_dissector pcap captures/lab.pcap -o captures/events.jsonl
@@ -221,3 +221,15 @@ python lab/gen_traffic.py --base http://localhost:8080/fhir --out captures/live_
 python lab/evaluate.py --events captures/live_events.jsonl --expected captures/live_expected.json
 python lab/mock_fhir_server.py --port 8081               # fallback server without Docker
 ```
+
+---
+
+## Clean-up (after Phase 6)
+
+**What:** made the project smaller and easier to read, without changing behaviour.
+- Deleted: `tests/test_smoke.py` (trivial import test), `tests/conftest.py`, `tests/__init__.py`, `lab/__init__.py` (replaced by `pythonpath = .` in `pytest.ini`), `captures/.gitkeep`, `.gitattributes`, and generated leftovers (`events_all.jsonl`, `evaluation_lab.json`, `mock_lab.pcap`, `mock_expected.json`).
+- Removed dead code: `classifier.query_param_names` (never used), the one-line `events._bundle` helper, the `--json` option of `evaluate.py`.
+- Moved the guides into `docs/` so the root only holds the README, the plan and the code folders.
+- **Kept** the 8 small dissector modules separate on purpose: one file per pipeline step (TCP → HTTP → detect → classify → body → event) is easier to understand than one big file, and it is the plan's layout.
+
+**Check after clean-up:** `pytest -q` → 139 passed (141 minus the smoke test and the removed mock-capture case); `evaluate.py` on the current `captures/lab.pcap` (268 packets, the 13:05 re-capture) → 100% precision, recall, interaction accuracy, PASS.

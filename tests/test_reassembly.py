@@ -137,7 +137,7 @@ def test_gap_without_ack_info_resolved_at_flush() -> None:
 
 
 def test_rst_closes_connection() -> None:
-    from scapy.layers.inet import IP, TCP
+    from scapy.layers.inet import TCP
 
     pkts = build_conversation(EXCHANGES[:1], fin=False)
     last = pkts[-1]
@@ -150,7 +150,6 @@ def test_rst_closes_connection() -> None:
     for t in tcp_tuples(pkts + [rst]):
         out += r.process(*t)
     assert len(out) == 1 and r.conns == {}
-    assert IP in rst
 
 
 def test_gap_inside_response_keeps_pairing() -> None:

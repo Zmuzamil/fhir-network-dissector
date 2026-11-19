@@ -8,7 +8,7 @@ packets → TCP reassembly → HTTP/1.1 parsing → FHIR detection → FHIR clas
 
 FHIR is not a binary protocol: it is a REST API on top of HTTP, with JSON or XML *resources* (`Patient`, `Observation`, `Bundle`, …). The dissector rebuilds the HTTP conversation from TCP segments, decides whether it is FHIR (with an explainable confidence score), and labels the FHIR *interaction* (read, search, create, transaction, …).
 
-**Status:** all items of the plan's definition of done are met. 141 automated tests pass. On a real capture against HAPI FHIR, both offline and live: **100% precision, 100% recall, 100% interaction accuracy**, with 0 false positives.
+**Status:** all items of the plan's definition of done are met. 139 automated tests pass. On a real capture against HAPI FHIR, both offline and live: **100% precision, 100% recall, 100% interaction accuracy**, with 0 false positives.
 
 ---
 
@@ -172,7 +172,7 @@ One JSON object per line (JSONL). Example (a real event from the lab, redacted b
 
 ## 5. Test results
 
-**Unit, integration and end-to-end tests:** `pytest` → **141 passed** (no Docker, network or admin rights).
+**Unit, integration and end-to-end tests:** `pytest` → **139 passed** (no Docker, network or admin rights).
 
 | File | Tests | Covers |
 |---|---|---|
@@ -181,13 +181,13 @@ One JSON object per line (JSONL). Example (a real event from the lab, redacted b
 | `test_classifier.py` | 39 | every row of the interaction table, base detection, operations, compartments, form search, percent-encoding |
 | `test_detector.py` | 20 | each signal weight, non-FHIR cases, threshold, version, redaction, `--all`, IPv6 via scapy |
 | `test_body.py` | 10 | Patient/Bundle/OperationOutcome/CapabilityStatement in JSON and XML, never fails |
-| `test_end_to_end.py` | 9 | synthetic PCAP → CLI (clean, shuffled+retransmitted, IPv6 mid-stream), evaluator, real lab captures |
+| `test_end_to_end.py` | 8 | synthetic PCAP → CLI (clean, shuffled+retransmitted, IPv6 mid-stream), evaluator, real lab capture |
 
 **Lab evaluation** (HAPI FHIR 8.12.0, FHIR R4 4.0.1, Docker; IPv6 loopback; gzip + chunked responses):
 
 | Run | Calls | TP | FP | FN | TN | Precision | Recall | Interaction accuracy | Resource-type accuracy |
 |---|---|---|---|---|---|---|---|---|---|
-| Offline (`captures/lab.pcap`, 265 packets) | 19 | 17 | 0 | 0 | 2 | **100%** | **100%** | **100%** | **100%** |
+| Offline (`captures/lab.pcap`, 268 packets) | 19 | 17 | 0 | 0 | 2 | **100%** | **100%** | **100%** | **100%** |
 | Live capture (260 packets) | 19 | 17 | 0 | 0 | 2 | **100%** | **100%** | **100%** | **100%** |
 | Mock server (fallback) | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% | 100% |
 
@@ -222,9 +222,10 @@ Interactions covered by the lab: capabilities, create ×3, read ×4 (JSON, XML, 
 ```
 fhir_dissector/   core package (http_parser, reassembly, detector, classifier, body, events, dissector, cli)
 lab/              mock_fhir_server.py, gen_traffic.py, run_scenario.py, evaluate.py
-tests/            pcap_builder.py + 6 test files
+tests/            pcap_builder.py (synthetic packets) + 6 test files
 captures/         lab.pcap, expected.json, events.jsonl, evaluation reports (PCAP/JSONL git-ignored)
+docs/             TESTING_GUIDE.md, REPORT_SUMMARY.md, LEARNING_NOTES.md
 .vscode/          settings, tasks, launch configurations, recommended extensions
 ```
 
-See also: `TESTING_GUIDE.md` (hands-on testing from zero), `REPORT_SUMMARY.md` (one-page summary for a report), `LEARNING_NOTES.md` (what we did and why), `FHIR_DISSECTOR_PLAN.md` (original plan).
+See also: [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) (hands-on testing from zero), [docs/REPORT_SUMMARY.md](docs/REPORT_SUMMARY.md) (one-page summary for a report), [docs/LEARNING_NOTES.md](docs/LEARNING_NOTES.md) (what we did and why), [FHIR_DISSECTOR_PLAN.md](FHIR_DISSECTOR_PLAN.md) (original plan).

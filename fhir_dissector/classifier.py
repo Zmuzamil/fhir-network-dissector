@@ -66,15 +66,6 @@ def split_path(target: str) -> tuple[list[str], str]:
     return segs, parts.query
 
 
-def query_param_names(query: str) -> list[str]:
-    """Unique parameter names in order of appearance."""
-    names: list[str] = []
-    for k, _ in parse_qsl(query, keep_blank_values=True):
-        if k not in names:
-            names.append(k)
-    return names
-
-
 def classify(method: str, target: str, bundle_type: Optional[str] = None,
              form_body: Optional[bytes] = None) -> dict[str, Any]:
     """Classify a request.
@@ -168,8 +159,7 @@ def classify(method: str, target: str, bundle_type: Optional[str] = None,
     res["interaction"] = inter
     if inter.startswith("search") or inter.startswith("history") or inter == "operation" or params:
         res["search_params"] = params
-        res["search_param_names"] = [k for i, (k, _) in enumerate(params)
-                                     if k not in [p for p, _ in params[:i]]]
+        res["search_param_names"] = list(dict.fromkeys(k for k, _ in params))  # unique, in order
     return res
 
 
