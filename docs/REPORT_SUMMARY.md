@@ -17,7 +17,7 @@ To build a modular protocol dissector module that **detects HL7 FHIR exchanges**
 
 Offline and live modes share the same code path.
 
-**Verification.** 156 automated tests run without Docker, network or privileges. They use synthetic TCP conversations with shuffled and duplicated segments, missing handshakes, IPv6, sequence wrap-around and lost segments. The real captures are scored by an evaluator that matches events to ground truth on (method, path, status).
+**Verification.** The dissector runs live on the server's network traffic while the scripted client makes its calls; an evaluator then matches every emitted event to the ground truth on (method, path, status) and computes detection precision, recall and interaction accuracy. The same evaluation was repeated on a recorded capture of the same scenario.
 
 ## Results
 

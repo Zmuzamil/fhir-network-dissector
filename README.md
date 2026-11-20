@@ -8,7 +8,7 @@ packets → TCP reassembly → HTTP/1.1 parsing → FHIR detection → FHIR clas
 
 FHIR is not a binary protocol: it is a REST API on top of HTTP, with JSON or XML *resources* (`Patient`, `Observation`, `Bundle`, …). The dissector rebuilds the HTTP conversation from TCP segments, decides whether it is FHIR (with an explainable confidence score), and labels the FHIR *interaction* (read, search, create, transaction, …).
 
-**Status:** all items of the plan's definition of done are met. 156 automated tests pass. On a real capture against HAPI FHIR, both offline and live: **100% precision, 100% recall, 100% interaction accuracy**, with 0 false positives.
+**Status:** ready for use on a live FHIR server (plaintext HTTP/1.1). Against a real HAPI FHIR server, both live and on a recorded capture: **100% precision, 100% recall, 100% interaction accuracy**, with 0 false positives.
 
 ---
 
@@ -29,7 +29,7 @@ FHIR is not a binary protocol: it is a REST API on top of HTTP, with JSON or XML
    docker compose up -d
    curl.exe http://localhost:8080/fhir/metadata      # JSON CapabilityStatement = ready
    ```
-4. Run the tests: `pytest` (no Docker, network or admin rights needed).
+4. Run the live test: see [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md).
 
 **Capture rights on Windows:** if Npcap was installed with *"Restrict Npcap driver's access to Administrators only"*, run the terminal **as Administrator** for `run_scenario.py` and `live`. On the development PC this option was off, so capture worked as a normal user.
 
@@ -38,7 +38,6 @@ FHIR is not a binary protocol: it is a REST API on top of HTTP, with JSON or XML
 ```bash
 python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
 docker compose up -d
-pytest
 sudo .venv/bin/python lab/run_scenario.py --out captures/lab.pcap      # capture needs root
 ```
 The loopback interface is `lo` (Linux) or `lo0` (macOS), chosen automatically.
@@ -84,8 +83,8 @@ Each event is printed as one JSON line when the response completes. Press **Ctrl
 
 ### VS Code
 
-- **Tasks** (*Terminal → Run Task*): `Start HAPI`, `Stop HAPI`, `Run tests`, `Run scenario`, `Dissect lab PCAP`, `Evaluate`.
-- **Debug configurations** (*Run and Debug*): *Dissect lab PCAP*, *Live capture (needs admin)*, *Mock FHIR server*, *Generate traffic*, *Evaluate*, *Debug current test file*.
+- **Tasks** (*Terminal → Run Task*): `Start HAPI`, `Stop HAPI`, `Run scenario`, `Dissect lab PCAP`, `Evaluate`.
+- **Debug configurations** (*Run and Debug*): *Dissect lab PCAP*, *Live capture (needs admin)*, *Mock FHIR server*, *Generate traffic*, *Evaluate*.
 
 ### As a library (integration point)
 
@@ -170,19 +169,7 @@ One JSON object per line (JSONL). Example (a real event from the lab, redacted b
 
 ---
 
-## 5. Test results
-
-**Unit, integration and end-to-end tests:** `pytest` → **156 passed** (no Docker, network or admin rights).
-
-| File | Tests | Covers |
-|---|---|---|
-| `test_http_parser.py` | 25 | Content-Length, chunked split at **every byte boundary**, gzip/deflate, HEAD, 204/304, 1xx, 101, until-close, pipelining, oversized headers, random garbage, body cap, gaps |
-| `test_reassembly.py` | 40 | in-order, **shuffled** (10 seeds), **retransmissions + overlaps** (10 seeds), both combined, **missing handshake**, **IPv6**, sequence wrap-around, no FIN, HEAD pairing, two connections, gaps with/without ACK info, RST, connection cap / eviction, request-queue cap |
-| `test_frames.py` | 14 | fast raw-frame decoder vs scapy (Ethernet, VLAN, loopback, Linux SLL, raw IP, IPv6 extension headers), non-TCP/fragments ignored, truncation, PCAPNG fallback, new CLI options |
-| `test_classifier.py` | 39 | every row of the interaction table, base detection, operations, compartments, form search, percent-encoding |
-| `test_detector.py` | 20 | each signal weight, non-FHIR cases, threshold, version, redaction, `--all`, IPv6 via scapy |
-| `test_body.py` | 10 | Patient/Bundle/OperationOutcome/CapabilityStatement in JSON and XML, never fails |
-| `test_end_to_end.py` | 8 | synthetic PCAP → CLI (clean, shuffled+retransmitted, IPv6 mid-stream), evaluator, real lab capture |
+## 5. Results
 
 **Lab evaluation** (HAPI FHIR 8.12.0, FHIR R4 4.0.1, Docker; IPv6 loopback; gzip + chunked responses):
 
@@ -196,7 +183,7 @@ Interactions covered by the lab: capabilities, create ×3, read ×4 (JSON, XML, 
 
 **Robustness and performance** (one CPU core, Windows 11 laptop, Python 3.13):
 
-| Test | Result |
+| Check | Result |
 |---|---|
 | 100,000 random garbage TCP segments | 0 crashes, 0 internal errors |
 | Speed: 26,000 packets / 1,000 connections / 5,000 events | **~26,500 packets/s** with the fast decoder (scapy decoding: ~3,300 packets/s, identical events) |
@@ -210,7 +197,7 @@ Interactions covered by the lab: capabilities, create ×3, read ×4 (JSON, XML, 
 
 | Area | Status |
 |---|---|
-| Correctness on plaintext HTTP/1.1 FHIR | ready: 100% in the lab (offline and live), 156 tests |
+| Correctness on plaintext HTTP/1.1 FHIR | ready: 100% on a live HAPI server and on a recorded capture |
 | Robustness (garbage, loss, reordering) | ready: fails soft, fuzz-tested |
 | Privacy | ready: redaction on by default; no tokens or resource contents ever written |
 | Resource limits | ready: connections, request queue, body size, header size, out-of-order buffer are all capped |
@@ -303,10 +290,9 @@ WantedBy=multi-user.target
 ```
 fhir_dissector/   core package (http_parser, reassembly, detector, classifier, body, events, dissector, cli)
 lab/              mock_fhir_server.py, gen_traffic.py, run_scenario.py, evaluate.py
-tests/            pcap_builder.py (synthetic packets) + 6 test files
 captures/         lab.pcap, expected.json, events.jsonl, evaluation reports (PCAP/JSONL git-ignored)
 docs/             FHIR_Dissector_Visual_Guide.pdf, TESTING_GUIDE.md, REPORT_SUMMARY.md, LEARNING_NOTES.md
 .vscode/          settings, tasks, launch configurations, recommended extensions
 ```
 
-See also: [docs/FHIR_Dissector_Visual_Guide.pdf](docs/FHIR_Dissector_Visual_Guide.pdf) (13-page visual guide with diagrams), [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) (hands-on testing from zero), [docs/REPORT_SUMMARY.md](docs/REPORT_SUMMARY.md) (one-page summary for a report), [docs/LEARNING_NOTES.md](docs/LEARNING_NOTES.md) (what we did and why), [FHIR_DISSECTOR_PLAN.md](FHIR_DISSECTOR_PLAN.md) (original plan).
+See also: [docs/FHIR_Dissector_Visual_Guide.pdf](docs/FHIR_Dissector_Visual_Guide.pdf) (13-page visual guide with diagrams), [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) (live-server test, step by step), [docs/REPORT_SUMMARY.md](docs/REPORT_SUMMARY.md) (one-page summary for a report), [docs/LEARNING_NOTES.md](docs/LEARNING_NOTES.md) (what we did and why), [FHIR_DISSECTOR_PLAN.md](FHIR_DISSECTOR_PLAN.md) (original plan).

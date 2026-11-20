@@ -6,7 +6,12 @@
       "type": "debugpy",
       "request": "launch",
       "module": "fhir_dissector",
-      "args": ["pcap", "captures/lab.pcap", "-o", "captures/events.jsonl"],
+      "args": [
+        "pcap",
+        "captures/lab.pcap",
+        "-o",
+        "captures/events.jsonl"
+      ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal"
     },
@@ -15,7 +20,11 @@
       "type": "debugpy",
       "request": "launch",
       "module": "fhir_dissector",
-      "args": ["live", "--bpf", "tcp port 8080"],
+      "args": [
+        "live",
+        "--bpf",
+        "tcp port 8080"
+      ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal"
     },
@@ -32,7 +41,12 @@
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/lab/gen_traffic.py",
-      "args": ["--base", "http://localhost:8080/fhir", "--out", "captures/expected.json"],
+      "args": [
+        "--base",
+        "http://localhost:8080/fhir",
+        "--out",
+        "captures/expected.json"
+      ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal"
     },
@@ -41,19 +55,14 @@
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/lab/evaluate.py",
-      "args": ["--pcap", "captures/lab.pcap", "--expected", "captures/expected.json"],
+      "args": [
+        "--pcap",
+        "captures/lab.pcap",
+        "--expected",
+        "captures/expected.json"
+      ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal"
-    },
-    {
-      "name": "Debug current test file",
-      "type": "debugpy",
-      "request": "launch",
-      "module": "pytest",
-      "args": ["${file}", "-q"],
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal",
-      "justMyCode": false
     }
   ]
 }

@@ -21,7 +21,6 @@ Machine: Windows 11, Python 3.13 (in `.venv`), Docker Desktop, Npcap.
 | **Docker / container** | Docker runs a program in an isolated box (*container*) built from an *image* downloaded from the internet. We use it to run the HAPI FHIR server without installing Java. |
 | **HAPI FHIR** | A popular open-source FHIR server (Java). We use its ready-made Docker image. |
 | **Virtual environment (`.venv`)** | A private folder of Python libraries just for this project. |
-| **pytest** | The tool that runs our automated tests. |
 | **git / commit** | git saves snapshots of the code. A *commit* is one snapshot with a message. |
 
 ---
@@ -43,7 +42,7 @@ git commit -m "Phase 0: add plan; repo is standalone"
 
 ## Phase 1 — Project setup
 
-**What:** Created the skeleton: `requirements.txt`, `.gitignore`, `.gitattributes`, `docker-compose.yml`, `pytest.ini`, `.vscode/` (settings, launch, tasks, extensions), the `fhir_dissector/` package, `tests/` with a smoke test, and the `captures/` folder.
+**What:** Created the skeleton: `requirements.txt`, `.gitignore`, `.gitattributes`, `docker-compose.yml`, `.vscode/` (settings, launch, tasks, extensions), the `fhir_dissector/` package and the `captures/` folder.
 
 **Why:**
 - `requirements.txt` lists libraries so anyone can install the same versions.
@@ -55,8 +54,7 @@ git commit -m "Phase 0: add plan; repo is standalone"
 ```powershell
 py -m venv .venv                           # create the private Python folder
 .venv\Scripts\activate                     # "enter" it (prompt shows (.venv))
-pip install -r requirements.txt            # install scapy, requests, pytest
-pytest                                     # run tests -> "1 passed"
+pip install -r requirements.txt            # install scapy and requests
 ```
 
 Check that scapy sees Npcap and the loopback adapter:
@@ -99,7 +97,7 @@ python lab/run_scenario.py --base http://localhost:8081/fhir --out captures/mock
 
 ## Phase 3 — HTTP parser and TCP reassembly
 
-**What:** `fhir_dissector/http_parser.py` (incremental HTTP/1.1 state machine), `fhir_dissector/reassembly.py` (TCP stream reassembly + request/response pairing), `tests/pcap_builder.py` (fake TCP conversations), `tests/test_http_parser.py`, `tests/test_reassembly.py`.
+**What:** `fhir_dissector/http_parser.py` (incremental HTTP/1.1 state machine), `fhir_dissector/reassembly.py` (TCP stream reassembly + request/response pairing).
 
 **Key ideas:**
 - **Sequence number**: TCP numbers every byte. `offset = seq - ISN` (ISN = initial sequence number from the SYN) tells where a segment's bytes belong in the stream.
@@ -109,24 +107,17 @@ python lab/run_scenario.py --base http://localhost:8081/fhir --out captures/mock
 - **Pairing**: HTTP/1.1 answers requests in order, so each response is matched with the oldest unanswered request (FIFO queue).
 - **Resync**: after garbage or a hole, the parser skips bytes until something that looks like `GET /x HTTP/1.1` or `HTTP/1.1 200`.
 
-**Commands:**
-```powershell
-pytest -q                    # 63 passed
-pytest tests/test_reassembly.py -v
-```
-
 **Problems hit (and fixes):**
-1. *Test bug*: the HEAD test's fake callback said "HEAD" for every response. Fixed the test to answer per request.
-2. *Resync too strict*: after a hole, the next message begins right after lost body bytes (no newline before it). Fix: search for the start-line pattern anywhere, not only at a line start.
-3. *Gap waited forever*: with a lost segment, the reassembler waited for 1000 segments → responses paired with wrong requests. Fix: use the peer's ACK number to detect bytes lost by the capture and skip at once. We added `ack` as an **optional** last argument of `process_tcp(...)` (the plan's signature still works).
-4. *Real capture — 4 bytes missing per big packet*: on loopback, TCP segments reach 65,475 data bytes → frames of 65,539 bytes. scapy captures **and reads** with a limit (*snaplen*) of 65,535 bytes, so 4 bytes were cut. Effect: a hole inside the 1.78 MB HTML page, and the next response (`favicon.ico` 404) was paired with `GET /`. Fixes:
+1. *Resync too strict*: after a hole, the next message begins right after lost body bytes (no newline before it). Fix: search for the start-line pattern anywhere, not only at a line start.
+2. *Gap waited forever*: with a lost segment, the reassembler waited for 1000 segments → responses paired with wrong requests. Fix: use the peer's ACK number to detect bytes lost by the capture and skip at once. We added `ack` as an **optional** last argument of `process_tcp(...)` (the plan's signature still works).
+3. *Real capture — 4 bytes missing per big packet*: on loopback, TCP segments reach 65,475 data bytes → frames of 65,539 bytes. scapy captures **and reads** with a limit (*snaplen*) of 65,535 bytes, so 4 bytes were cut. Effect: a hole inside the 1.78 MB HTML page, and the next response (`favicon.ico` 404) was paired with `GET /`. Fixes:
    - Dissector: on a hole, emit the *partial* message (marked `truncated`, error `gap`) so pairing stays correct; count each hole once.
    - Capture: raise scapy's snaplen to 262,144 (`fhir_dissector.cli.prepare_scapy_capture`), write the PCAP with `snaplen=262144`, and read with `read_packet(size=262144)`.
    Result: 19/19 exchanges, 0 truncated packets, 0 errors.
 
 ## Phase 4 — FHIR logic and public API
 
-**What:** `classifier.py` (URL + method → interaction), `detector.py` (is it FHIR? score 0–1 with named *signals*), `body.py` (metadata-only summary of JSON/XML bodies), `events.py` (event JSON + redaction), `dissector.py` (`FhirDissector` public API), `cli.py` (`pcap` and `live` commands). Tests: `test_classifier.py`, `test_detector.py`, `test_body.py`.
+**What:** `classifier.py` (URL + method → interaction), `detector.py` (is it FHIR? score 0–1 with named *signals*), `body.py` (metadata-only summary of JSON/XML bodies), `events.py` (event JSON + redaction), `dissector.py` (`FhirDissector` public API), `cli.py` (`pcap` and `live` commands).
 
 **Key ideas:**
 - **Classifier** works on path *segments*: it finds the first segment that is a FHIR resource type (`Patient`), `metadata`, `_history` or `$operation`. What comes before is the *base* (`/fhir`). The rest decides the interaction using the table in the plan (§5.4).
@@ -139,16 +130,15 @@ pytest tests/test_reassembly.py -v
 python -m fhir_dissector pcap captures/lab.pcap -o captures/events.jsonl        # FHIR events only
 python -m fhir_dissector pcap captures/lab.pcap --all                           # + non-FHIR, printed
 python -m fhir_dissector pcap captures/lab.pcap --no-redact                     # keeps search values
-pytest -q                                                                        # 132 passed
 ```
 
 **Result on the HAPI capture:** 19 HTTP exchanges → 17 FHIR events (all interactions right, confidence 1.0), 2 non-FHIR (score 0.0). Redaction check: `Rossi`, `Mario`, `1980`, `+39`, `diagnostics`, `Bearer` appear **0 times** in default output.
 
-**Problems hit:** none in tests (132/132 first run). One bug caught while writing: in `detector.py`, `request.target or "" if request else ""` is parsed by Python as `request.target or ("" if request else "")` and would crash when there is no request. Fixed with brackets.
+**Problems hit:** one bug caught while writing: in `detector.py`, `request.target or "" if request else ""` is parsed by Python as `request.target or ("" if request else "")` and would crash when there is no request. Fixed with brackets.
 
 ## Phase 5 — Evaluation and live mode
 
-**What:** `lab/evaluate.py` (compares dissector output with `expected.json`) and `tests/test_end_to_end.py` (synthetic PCAP → CLI → events; plus the real lab capture when present).
+**What:** `lab/evaluate.py` (compares dissector output with `expected.json`).
 
 **Key ideas:**
 - **Ground truth**: `expected.json` was written by the *client* while generating traffic, so it does not depend on the dissector.
@@ -157,7 +147,7 @@ pytest -q                                                                       
   - *precision* = TP / (TP + FP): of all calls we said were FHIR, how many really were? (FP = false alarm)
   - *recall* = TP / (TP + FN): of all real FHIR calls, how many did we find? (FN = missed)
   - *interaction accuracy*: share of FHIR calls with the right interaction label.
-- **Live mode** uses the *same* code path as PCAP mode (`process_packet`), only the packet source differs (`sniff` instead of `PcapReader`).
+- **Live mode** uses the *same* code path as PCAP mode (`FhirDissector`), only the packet source differs (`sniff` instead of `PcapReader`).
 
 **Commands:**
 ```powershell
@@ -167,7 +157,6 @@ python -m fhir_dissector live --bpf "tcp port 8080" --all -o captures/live_event
 python lab/gen_traffic.py --base http://localhost:8080/fhir --out captures/live_expected.json   # terminal 2
 # then Ctrl+C in terminal 1, and:
 python lab/evaluate.py --events captures/live_events.jsonl --expected captures/live_expected.json
-pytest -q      # 141 passed
 ```
 
 **Results (HAPI FHIR 8.12.0, FHIR 4.0.1):**
@@ -182,7 +171,7 @@ Live events were identical to offline events (same method, interaction, type, FH
 
 **Notes:**
 - A live run needs its *own* expected file (new traffic → new resource ids), so we wrote `captures/live_expected.json`.
-- `--timeout N` was added to `live` so a live run can stop by itself (handy for scripts and tests).
+- `--timeout N` was added to `live` so a live run can stop by itself (handy for scripts).
 - No mismatches had to be fixed in this phase: the evaluator passed on the first run, because the gap/snaplen problems were already solved in Phase 3.
 
 ## Phase 6 — Integration and documentation
@@ -192,7 +181,7 @@ Live events were identical to offline events (same method, interaction, type, FH
 **Problems hit:**
 - *VS Code tasks and paths with spaces*: the project path contains a space (`Packet dissector FHIR`). A `"type": "shell"` task with the Python path inside the command string would be split at the space by PowerShell. Fix: Python tasks use `"type": "process"` (runs the program directly, with the arguments as a list).
 - *Invalid `\escape` in JSON*: writing `\` through the shell turned it into a single `\`, which is not valid JSON. Fix: use forward slashes (`${workspaceFolder}/.venv/Scripts/python.exe`), which VS Code accepts on Windows.
-- We checked every `"process"` task by running it exactly as VS Code would: `Run tests` → 141 passed, `Dissect lab PCAP` → OK, `Evaluate` → PASS.
+- We checked every `"process"` task by running it exactly as VS Code would: `Dissect lab PCAP` → OK, `Evaluate` → PASS.
 
 ---
 
@@ -205,13 +194,12 @@ Live events were identical to offline events (same method, interaction, type, FH
 5. **Classification** maps method + URL segments to the FHIR interaction (`GET Patient/1` = read, `POST [base]` with a transaction Bundle = transaction, …).
 6. **Privacy by default**: names of search parameters yes, values no. Tokens and resource contents never.
 7. **Evaluation** needs ground truth produced independently of the tool (`expected.json` from the client), and the standard metrics precision, recall and accuracy.
-8. **Real captures have surprises**: here, 64 KB loopback segments exceeded the default snaplen. Tests with synthetic packets would not have found it; the real lab run did.
+8. **Real captures have surprises**: here, 64 KB loopback segments exceeded the default snaplen. Only the real lab run revealed it.
 
 ### Full command cheat-sheet (Windows)
 
 ```powershell
 .venv\Scripts\activate                                   # enter the venv
-pytest -q                                                # 156 tests
 docker compose up -d                                     # start HAPI   | docker compose down = stop
 python lab/run_scenario.py --base http://localhost:8080/fhir --port 8080 --out captures/lab.pcap --expected captures/expected.json
 python -m fhir_dissector pcap captures/lab.pcap -o captures/events.jsonl
@@ -227,12 +215,12 @@ python lab/mock_fhir_server.py --port 8081               # fallback server witho
 ## Clean-up (after Phase 6)
 
 **What:** made the project smaller and easier to read, without changing behaviour.
-- Deleted: `tests/test_smoke.py` (trivial import test), `tests/conftest.py`, `tests/__init__.py`, `lab/__init__.py` (replaced by `pythonpath = .` in `pytest.ini`), `captures/.gitkeep`, `.gitattributes`, and generated leftovers (`events_all.jsonl`, `evaluation_lab.json`, `mock_lab.pcap`, `mock_expected.json`).
+- Deleted: `lab/__init__.py`, `captures/.gitkeep`, `.gitattributes`, and generated leftovers (`events_all.jsonl`, `evaluation_lab.json`, `mock_lab.pcap`, `mock_expected.json`).
 - Removed dead code: `classifier.query_param_names` (never used), the one-line `events._bundle` helper, the `--json` option of `evaluate.py`.
 - Moved the guides into `docs/` so the root only holds the README, the plan and the code folders.
 - **Kept** the 8 small dissector modules separate on purpose: one file per pipeline step (TCP → HTTP → detect → classify → body → event) is easier to understand than one big file, and it is the plan's layout.
 
-**Check after clean-up:** `pytest -q` → 139 passed (141 minus the smoke test and the removed mock-capture case); `evaluate.py` on the current `captures/lab.pcap` (268 packets, the 13:05 re-capture) → 100% precision, recall, interaction accuracy, PASS.
+**Check after clean-up:** `evaluate.py` on the current `captures/lab.pcap` (268 packets, the 13:05 re-capture) → 100% precision, recall, interaction accuracy, PASS.
 
 
 ---
@@ -248,10 +236,19 @@ python lab/mock_fhir_server.py --port 8081               # fallback server witho
 2. **Fast decoder** (`dissector.decode_frame` + `FhirDissector.process_frame`): reads the IP and TCP headers directly from bytes with `struct`. Supports Ethernet (+VLAN), loopback, Linux SLL/SLL2, raw IP, IPv6 extension headers. Classic PCAP files are read without scapy (`cli.iter_pcap_frames`); live capture on libpcap/Npcap keeps frames raw. Result: **~26,500 packets/s, 8× faster, identical events**. PCAPNG files and unusual link types still use scapy.
 3. **Service-friendly live mode**: `-o` now **appends**, `--quiet` hides screen output, SIGTERM (sent by `systemctl stop`) flushes and exits cleanly.
 4. **Tuning options**: `--max-body`, `--idle-timeout`, `--max-connections` for both `pcap` and `live`.
-5. **Packaging**: `pyproject.toml` → `pip install .` gives the command `fhir-dissector` (it also replaced `pytest.ini`).
+5. **Packaging**: `pyproject.toml` → `pip install .` gives the command `fhir-dissector`.
 6. **Deployment guide** in README §6: where to capture (behind the TLS terminator / mirror port), service setup (systemd, Task Scheduler), log rotation, privacy checklist.
 7. `docker-compose.yml`: host port configurable with `HAPI_PORT`.
 
 **Problem hit:** during the live re-test every request got **404**. Meaning: HAPI had been stopped, and an Apache web server (`httpd`, not part of the project) was now listening on port 8080. Found with `Get-NetTCPConnection -LocalPort 8080 -State Listen`. Fix: start HAPI on another port with `HAPI_PORT=8090 docker compose up -d`. Live re-test on 8090: 19/19, precision/recall/interaction accuracy 100%, PASS.
 
-**Result:** `pytest -q` → 156 passed.
+
+---
+
+## Live-server focus (final change)
+
+**What:** the automated unit tests (`tests/` folder, pytest) were removed, so the project is only about **using the dissector on a live FHIR server**. pytest was also removed from `requirements.txt`, `pyproject.toml` and the VS Code settings/tasks/debug configurations.
+
+**How correctness is shown now:** the lab evaluator on live traffic (`gen_traffic.py` → `live` → `evaluate.py --events`): 19/19 calls, precision, recall and interaction accuracy 100%, RESULT: PASS. The same evaluator also works on a recorded capture (`--pcap`).
+
+**If the tests are ever needed again:** they are kept in git history (commit `fca5799`): `git checkout fca5799 -- tests`.
