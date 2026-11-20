@@ -200,14 +200,20 @@ Live events were identical to offline events (same method, interaction, type, FH
 
 ```powershell
 .venv\Scripts\activate                                   # enter the venv
-docker compose up -d                                     # start HAPI   | docker compose down = stop
+Get-NetTCPConnection -LocalPort 8080 -State Listen       # port busy? then use 8090 everywhere
+docker compose up -d                                     # start HAPI on 8080 | docker compose down = stop
+$env:HAPI_PORT=8090; docker compose up -d                # ... or on 8090 if 8080 is busy
+# live test
+python -m fhir_dissector live --bpf "tcp port 8080" --all -o captures/live_events.jsonl        # terminal 1
+python lab/gen_traffic.py --base http://localhost:8080/fhir --out captures/live_expected.json   # terminal 2
+python lab/evaluate.py --events captures/live_events.jsonl --expected captures/live_expected.json
+# as a service (after `pip install .`)
+fhir-dissector live --iface "Ethernet" --bpf "tcp port 8080" -o C:\fhir\events.jsonl --quiet
+# optional: record once, analyse the file later
 python lab/run_scenario.py --base http://localhost:8080/fhir --port 8080 --out captures/lab.pcap --expected captures/expected.json
 python -m fhir_dissector pcap captures/lab.pcap -o captures/events.jsonl
 python lab/evaluate.py --pcap captures/lab.pcap --expected captures/expected.json
-python -m fhir_dissector live --bpf "tcp port 8080" --all -o captures/live_events.jsonl
-python lab/gen_traffic.py --base http://localhost:8080/fhir --out captures/live_expected.json
-python lab/evaluate.py --events captures/live_events.jsonl --expected captures/live_expected.json
-python lab/mock_fhir_server.py --port 8081               # fallback server without Docker
+python lab/mock_fhir_server.py --port 8081               # small FHIR server without Docker
 ```
 
 ---

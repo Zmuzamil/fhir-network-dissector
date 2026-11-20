@@ -8,14 +8,15 @@ To build a modular protocol dissector module that **detects HL7 FHIR exchanges**
 
 **Lab setup.** No clinical network was available, so traffic was generated in a controlled lab: a HAPI FHIR server (v8.12.0, FHIR R4 4.0.1) in Docker, and a scripted client issuing 19 calls per run. These were 17 FHIR interactions (capabilities, create, read in JSON and XML, update, history, vread, search via GET and POST `_search`, transaction and batch Bundles, the `$everything` operation, delete, and reads that return 410 and 404) and 2 non-FHIR requests on the same server. The client records a *ground-truth* file with the real method, path, status and expected interaction of every call, independently of the dissector. Packets were captured on the loopback interface with scapy/Npcap. A standard-library mock FHIR server served as a fallback and a second test target.
 
-**Dissector design.** Python 3, standard library plus scapy (packet I/O only; the core is independent of scapy). The pipeline has five stages:
-1. **TCP reassembly:** connection tracking, client identification, sequence-number unwrapping, out-of-order buffering, retransmission and overlap trimming, and gap recovery using the peer's acknowledgement numbers.
-2. **Incremental HTTP/1.1 parsing:** Content-Length, chunked transfer, gzip/deflate, HEAD/1xx/204/304/101 semantics, pipelining, resynchronisation after corrupt input. FIFO request/response pairing on keep-alive connections.
-3. **FHIR detection:** a weighted, explainable score from eight signals (FHIR media types, `Accept`, top-level `resourceType`, FHIR XML namespace, `_format`, resource-type path segments, `/metadata`, `/fhir` base). Threshold 0.5.
+**Dissector design.** Python 3, standard library plus scapy (packet capture only; the core is independent of scapy). Packets are decoded by a fast raw-frame decoder (IPv4/IPv6, Ethernet/VLAN, loopback, Linux cooked capture) and pass through six stages:
+1. **TCP reassembly:** connection tracking, client identification, sequence-number unwrapping, out-of-order buffering, retransmission and overlap trimming, and gap recovery using the peer's acknowledgement numbers. FIFO request/response pairing on keep-alive connections.
+2. **Incremental HTTP/1.1 parsing:** Content-Length, chunked transfer, gzip/deflate, HEAD/1xx/204/304/101 semantics, pipelining, resynchronisation after corrupt input.
+3. **Body summary:** metadata only from JSON/XML bodies (resource type, id, version, Bundle type and entry counts, OperationOutcome severity/code), never resource contents.
 4. **Classification:** segment-based URL analysis against the full R4+R5 resource list, mapping method + path to 20+ FHIR interactions, with base, resource type, id, version and operation.
-5. **Event building with redaction by default:** search parameter names only, no query strings, no tokens, no resource contents, no diagnostic text.
+5. **FHIR detection:** a weighted, explainable score from eight signals (FHIR media types, `Accept`, top-level `resourceType`, FHIR XML namespace, `_format`, resource-type path segments, `/metadata`, `/fhir` base). Threshold 0.5.
+6. **Event building with redaction by default:** search parameter names only, no query strings, no tokens, no resource contents, no diagnostic text.
 
-Offline and live modes share the same code path.
+Live capture and recorded captures share the same code path. For live use the tool is packaged as a command (`fhir-dissector`), runs as a service (append-only output, clean shutdown), and bounds its memory with caps on tracked connections, queued requests, buffered data and body size.
 
 **Verification.** The dissector runs live on the server's network traffic while the scripted client makes its calls; an evaluator then matches every emitted event to the ground truth on (method, path, status) and computes detection precision, recall and interaction accuracy. The same evaluation was repeated on a recorded capture of the same scenario.
 
@@ -23,11 +24,11 @@ Offline and live modes share the same code path.
 
 | Run | Calls | TP | FP | FN | TN | Precision | Recall | Interaction accuracy |
 |---|---|---|---|---|---|---|---|---|
-| Offline PCAP (HAPI, 268 packets) | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% |
-| Live capture (HAPI, 260 packets) | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% |
-| Offline PCAP (mock server) | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% |
+| Live capture (HAPI, 312 packets) | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% |
+| Recorded capture (HAPI, 268 packets) | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% |
+| Built-in mock server | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% |
 
-Resource-type accuracy was also 100%, and live events were identical to the offline events. Robustness and cost: 100,000 random TCP segments caused no failure; a raw-frame decoder processes about 26,500 packets/s on one CPU core (8 times faster than generic scapy decoding, with identical output); memory is bounded by caps on tracked connections, queued requests, buffered out-of-order data and stored body size. The default output contained none of the synthetic patient data (names, birth dates, telephone numbers, search values, server diagnostics). The real HAPI traffic was IPv6 loopback with gzip-compressed, chunked responses.
+Resource-type accuracy was also 100%, and live events matched the events from the recorded capture. Robustness and cost: 100,000 random TCP segments caused no failure; a raw-frame decoder processes about 26,500 packets/s on one CPU core (8 times faster than generic scapy decoding, with identical output); memory stays bounded under load. The default output contained none of the synthetic patient data (names, birth dates, telephone numbers, search values, server diagnostics). The real HAPI traffic was IPv6 loopback with gzip-compressed, chunked responses.
 
 The lab surfaced one capture artefact worth reporting. Loopback TCP segments reached 65,475 data bytes (65,539-byte frames), which exceeded the default 65,535-byte capture/read limit of the capture library and silently cut 4 bytes from large frames. The dissector's ACK-based gap recovery kept request/response pairing correct in that case. The lab tools now capture, write and read with a 262,144-byte limit.
 
