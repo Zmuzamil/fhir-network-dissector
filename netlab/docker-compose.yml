@@ -1,0 +1,86 @@
+# FHIR hospital network lab - base services. The client nodes of a scenario are added by
+# labctl.py, which writes compose.scenario.yml from the scenario's .ini files.
+#
+#   br-fhir       10.63.0.0/24   the clinical network: everything here is captured
+#   br-fhir-back  10.63.1.0/24   proxy -> HAPI behind the TLS terminator (NOT captured)
+#
+# Both networks are "internal": containers cannot reach the internet at run time.
+name: fhir-netlab
+
+networks:
+  fhir:
+    driver: bridge
+    internal: true
+    driver_opts:
+      com.docker.network.bridge.name: br-fhir
+      com.docker.network.driver.mtu: "1500"
+    ipam:
+      config:
+        - subnet: 10.63.0.0/24
+          gateway: 10.63.0.1
+  fhir-back:
+    driver: bridge
+    internal: true
+    driver_opts:
+      com.docker.network.bridge.name: br-fhir-back
+      com.docker.network.driver.mtu: "1500"
+    ipam:
+      config:
+        - subnet: 10.63.1.0/24
+          gateway: 10.63.1.1
+
+services:
+  # The FHIR server (HAPI FHIR JPA server, R4). Its image has no shell ("distroless"), so it
+  # cannot run a healthcheck or ethtool itself: the two helpers below do that from outside.
+  hapi:
+    image: hapiproject/hapi:latest
+    networks:
+      fhir:
+        ipv4_address: 10.63.0.10
+        mac_address: "02:63:00:00:00:10"
+      fhir-back:
+        ipv4_address: 10.63.1.10
+
+  # Shares HAPI's network stack (same interfaces) and turns its TCP offload off.
+  hapi-offload:
+    image: fhir-netlab-node
+    network_mode: "service:hapi"
+    cap_add: [NET_ADMIN]
+    depends_on: [hapi]
+    command: ["sh", "-c", "for d in $$(ls /sys/class/net); do [ $$d = lo ] || ethtool -K $$d tso off gso off gro off; done; echo offload-off"]
+
+  # One-shot readiness check: exits 0 as soon as HAPI answers /fhir/metadata.
+  wait-hapi:
+    image: fhir-netlab-node
+    networks:
+      fhir:
+        ipv4_address: 10.63.0.250
+        mac_address: "02:63:00:00:02:50"
+    depends_on: [hapi-offload]
+    command:
+      - python
+      - -c
+      - |
+        import time, sys, urllib.request
+        for i in range(120):
+            try:
+                with urllib.request.urlopen("http://10.63.0.10:8080/fhir/metadata", timeout=5) as r:
+                    if r.status == 200:
+                        print("hapi-ready"); sys.exit(0)
+            except Exception:
+                pass
+            time.sleep(3)
+        sys.exit("HAPI not ready after 6 minutes")
+
+  # Packet capture on the bridge. network_mode host = the network namespace where Docker
+  # creates br-fhir (on Docker Desktop: inside its Linux VM). Started by labctl.py with
+  # CAPTURE_FILE set; stopped with SIGTERM (tcpdump -U has flushed every packet already).
+  capture:
+    image: fhir-netlab-node
+    network_mode: host
+    cap_add: [NET_ADMIN, NET_RAW]
+    profiles: [capture]
+    volumes:
+      - ../captures/netlab:/captures
+    entrypoint: ["tcpdump"]
+    command: ["-i", "br-fhir", "-U", "-s", "0", "-w", "/captures/${CAPTURE_FILE:-capture.pcap}"]
