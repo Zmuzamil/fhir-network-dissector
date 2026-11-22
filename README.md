@@ -8,96 +8,78 @@ packets → TCP reassembly → HTTP/1.1 parsing → FHIR detection → FHIR clas
 
 FHIR is not a binary protocol: it is a REST API on top of HTTP, with JSON or XML *resources* (`Patient`, `Observation`, `Bundle`, …). The dissector rebuilds the HTTP conversation from TCP segments, decides whether it is FHIR (with an explainable confidence score), and labels the FHIR *interaction* (read, search, create, transaction, …).
 
-**Status:** ready for use on a live FHIR server (plaintext HTTP/1.1). Against a real HAPI FHIR server, both live and on a recorded capture: **100% precision, 100% recall, 100% interaction accuracy**, with 0 false positives.
+**Status:** evaluated on an emulated hospital network (Docker, separate hosts, 1500-byte MTU): 3,762 calls from up to 6 concurrent client systems over 4 scenarios of 5 minutes, with automatic ground truth: **100% precision, 100% recall, 100% interaction accuracy**, 0 false positives (details in section 5).
 
 ---
 
 ## 1. Setup
 
-### Windows (tested: Windows 11, Python 3.13, Docker Desktop, Npcap)
+### Windows (tested: Windows 11, Python 3.13, Docker Desktop with WSL2)
 
-1. Install **Python 3.10+**, **Docker Desktop**, **Npcap** (tick *"Support loopback traffic"*), optionally **Wireshark**, and the VS Code **Python** extension.
+1. Install **Python 3.10+**, **Docker Desktop**, optionally **Wireshark** and **Npcap** (only for live capture on a real interface), and the VS Code **Python** extension.
 2. In PowerShell, in the project folder:
    ```powershell
    py -m venv .venv
    .venv\Scripts\activate
    pip install -r requirements.txt
+   pytest -q                                  # unit tests: no Docker, network or admin rights
    ```
    If PowerShell blocks `activate`, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, or call `.venv\Scripts\python.exe` directly.
-3. Start the FHIR server (the first start downloads the image and takes 1–2 minutes):
-   ```powershell
-   docker compose up -d
-   curl.exe http://localhost:8080/fhir/metadata      # JSON CapabilityStatement = ready
-   ```
-4. Run the live test: see [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md).
-
-**Capture rights on Windows:** if Npcap was installed with *"Restrict Npcap driver's access to Administrators only"*, run the terminal **as Administrator** for `run_scenario.py` and `live`. On the development PC this option was off, so capture worked as a normal user.
+3. Run the network lab (see section 2); the first run builds the node image and downloads HAPI (internet needed once).
 
 ### Linux / macOS
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
-docker compose up -d
-sudo .venv/bin/python lab/live_demo.py all                           # capture needs root
-```
-The loopback interface is `lo` (Linux) or `lo0` (macOS), chosen automatically.
-
-### Without Docker (fallback)
-
-```powershell
-python lab/mock_fhir_server.py --port 8081           # terminal 1 (keep open)
-python lab/live_demo.py run                          # terminal 2: finds the mock server by itself
+pytest -q
+DURATION=60 ./netlab/lab.sh generate
 ```
 
 ---
 
 ## 2. Usage
 
-### 1 click: run everything
+### The network lab (test bed)
 
-In VS Code press **Ctrl+Shift+B** (task *Run everything (1 click)*), or in a terminal:
+[`netlab/`](netlab/README.md) builds a small hospital network in Docker: HAPI FHIR and several systems (EHR, laboratory, bedside monitors, clinician workstations, an intranet server and browser, an HTTPS proxy), each in its own container with its own IP and MAC on the bridge `br-fhir`. A capture container records the bridge; every client writes an answer key; the evaluator compares the dissector with it.
+
 ```powershell
-python lab/live_demo.py all
+.\netlab\lab.ps1 generate                 # every scenario, 5 min each, then evaluate (~28 min)
+.\netlab\lab.ps1 generate -Short          # 60 s each (~10 min)
+.\netlab\lab.ps1 run -Scenario icu        # one scenario
+.\netlab\lab.ps1 up -Scenario ward ; .\netlab\lab.ps1 down
 ```
-It starts Docker Desktop if needed, starts HAPI (port 8080, or 8090 if 8080 is busy) and waits until it answers, then runs the live test: live dissector + 19 calls + grade, ending with `RESULT: PASS`. The first time HAPI needs 1–2 minutes to start; after that a run takes a few seconds. Results: `captures/live_events.jsonl` (one line per request/response) and the grade in `captures/evaluation_live.txt`.
-
-Other actions: `run` (live test only), `record` (save a PCAP), `start`, `stop` — also as VS Code tasks.
-
-**PCAP files:** `python lab/live_demo.py record` (task *Record PCAP*) records the traffic into `captures/pcaps/`. A ready-made, documented set is in [captures/pcaps/](captures/pcaps/README.md): `fhir_hapi.pcap` (HAPI FHIR R4) and `fhir_mock.pcap`, each with ground truth and score (both 100%).
+In VS Code: **Ctrl+Shift+B** → *Network lab: all scenarios* or *quick run*. Results: `captures/netlab/` (PCAP, answer key, evaluation per scenario, `summary.txt`).
 
 ### Offline (PCAP / PCAPNG)
 
 ```powershell
-python -m fhir_dissector pcap captures/pcaps/fhir_hapi.pcap -o captures/events.jsonl
-python -m fhir_dissector pcap captures/pcaps/fhir_hapi.pcap --all          # also non-FHIR HTTP (is_fhir: false)
-python -m fhir_dissector pcap captures/pcaps/fhir_hapi.pcap --no-redact    # keep search values (patient data!)
-python -m fhir_dissector pcap captures/pcaps/fhir_hapi.pcap --min-confidence 0.8
+python -m fhir_dissector pcap captures/netlab/general.pcap -o captures/events.jsonl
+python -m fhir_dissector pcap captures/netlab/general.pcap --all          # also non-FHIR HTTP (is_fhir: false)
+python -m fhir_dissector pcap captures/netlab/general.pcap --no-redact    # keep search values (patient data!)
+python -m fhir_dissector pcap captures/netlab/general.pcap --min-confidence 0.8
 ```
 Without `-o`, events are printed to the terminal. A summary (packets, connections, events, FHIR events per interaction) is always printed at the end.
 
 ### Live
 
 ```powershell
-python -m fhir_dissector live --bpf "tcp port 8080"                       # loopback by default
-python -m fhir_dissector live --iface "Ethernet" --bpf "tcp port 80" -o captures/live.jsonl
-python -m fhir_dissector live --bpf "tcp port 8080" --timeout 60          # stop after 60 s
+python -m fhir_dissector live --iface "Ethernet" --bpf "tcp port 8080" -o captures/live.jsonl
+python -m fhir_dissector live --iface "Ethernet" --bpf "tcp port 8080" --timeout 60   # stop after 60 s
 ```
-Each event is printed as one JSON line when the response completes. Press **Ctrl+C** to stop: open connections are flushed and the summary is printed.
+Each event is printed as one JSON line when the response completes. Press **Ctrl+C** to stop: open connections are flushed and the summary is printed. (On Windows the network lab's bridge is inside Docker's Linux VM, so the lab is analysed from its captures.)
 
-### Lab
+### Evaluation
 
 | Command | What it does |
 |---|---|
-| `python lab/live_demo.py all \| start \| run \| record \| stop` | the 1-click helper (used by the VS Code tasks) |
-| `python lab/gen_traffic.py --base http://localhost:8080/fhir --out captures/live_expected.json` | 19 scripted calls (17 FHIR + 2 non-FHIR); writes the ground truth |
-| `python lab/run_scenario.py --base http://localhost:8080/fhir --port 8080 --out captures/pcaps/x.pcap --expected captures/pcaps/x_expected.json` | capture → traffic → save PCAP + ground truth (used by `record`) |
-| `python lab/evaluate.py --pcap captures/pcaps/fhir_hapi.pcap --expected captures/pcaps/fhir_hapi_expected.json` | table + precision / recall / accuracy; exit 0 only if all match |
-| `python lab/evaluate.py --events captures/live_events.jsonl --expected captures/live_expected.json` | evaluate events from a live run (use `live --all`) |
+| `python lab/evaluate.py --pcap captures/netlab/icu.pcap --expected captures/netlab/icu_expected.jsonl` | network lab: per-client matching, metrics, capture statistics; exit 0 only if all match |
+| `python lab/evaluate.py --pcap X.pcap --expected X.json` | single-client answer key (JSON list) |
 
 ### VS Code
 
-- **Tasks** (*Terminal → Run Task*): `Run everything (1 click)` (**Ctrl+Shift+B**), `Live test only`, `Record PCAP`, `Start FHIR server`, `Stop FHIR server`. They call `lab/live_demo.py all | run | record | start | stop`.
-- **Debug configurations** (*Run and Debug*): *Live test (1 click, debuggable)*, *Dissect recorded PCAP*, *Evaluate recorded PCAP*, *Mock FHIR server*.
+- **Tasks** (*Terminal → Run Task*): *Network lab: all scenarios (5 min each)*, *Network lab: quick run (60 s each)* (both on **Ctrl+Shift+B**), *Network lab: evaluate captures*, *Network lab: stop (down)*, *Run unit tests*.
+- **Debug configurations**: *Network lab: run icu (60 s)*, *Dissect a network-lab capture*, *Evaluate a network-lab capture*, *Show a node config*, *Debug current test file*.
 
 ### As a library (integration point)
 
@@ -178,29 +160,32 @@ One JSON object per line (JSONL). Example (a real event from the lab, redacted b
 | `fhir_dissector/dissector.py` | `FhirDissector`: `process_tcp`, `process_packet`, `flush`. Fails soft. |
 | `fhir_dissector/cli.py` | `pcap` (streaming `PcapReader`) and `live` (`sniff`) subcommands, sharing the same code path. |
 
-**Capture detail (loopback).** On loopback, TCP segments can reach ~65,475 data bytes, so frames are 65,539 bytes: bigger than scapy's default 65,535-byte capture and read limit (*snaplen*). The tools raise the limit to 262,144 when capturing, writing and reading. Without this, 4 bytes per large frame are lost; the dissector would still pair correctly, but it would flag `gap`.
+**Capture detail.** Reading and live capture use a 262,144-byte limit (*snaplen*), not scapy's default 65,535: on loopback interfaces TCP segments can reach ~65 KB, and 4 bytes per frame were silently cut in an early test. On a normal network (and in the network lab) frames are at most 1514 bytes.
 
 ---
 
 ## 5. Results
 
-**Lab evaluation** (HAPI FHIR 8.12.0, FHIR R4 4.0.1, Docker; IPv6 loopback; gzip + chunked responses):
+**Network lab** (`netlab/`, Docker Desktop on Windows 11): HAPI FHIR 8.12.0 (R4) and up to 6 concurrent client systems, each its own host (own IP and MAC) on one bridge, MTU 1500 with TCP offload off; 4 scenarios × 5 minutes; answer keys written by the clients themselves.
 
-| Run | Calls | TP | FP | FN | TN | Precision | Recall | Interaction accuracy | Resource-type accuracy |
-|---|---|---|---|---|---|---|---|---|---|
-| Recorded (`captures/pcaps/fhir_hapi.pcap`, 238 packets) | 19 | 17 | 0 | 0 | 2 | **100%** | **100%** | **100%** | **100%** |
-| Live capture, fast decoder (312 packets) | 19 | 17 | 0 | 0 | 2 | **100%** | **100%** | **100%** | **100%** |
-| Mock server (fallback) | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% | 100% |
+| Scenario | Calls | Encrypted | TP | FP | FN | TN | Precision | Recall | Interaction acc. | Resource-type acc. | Max frame | TCP conns |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| general (6 clients) | 1,080 | 135 | 796 | 0 | 0 | 149 | 100% | 100% | 100% | 100% | 1514 | 173 |
+| ward (4 clients) | 683 | 0 | 504 | 0 | 0 | 179 | 100% | 100% | 100% | 100% | 1514 | 185 |
+| laboratory (2 clients) | 437 | 0 | 437 | 0 | 0 | 0 | 100% | 100% | 100% | 100% | 1514 | 299 |
+| icu (3 clients) | 1,562 | 0 | 1,562 | 0 | 0 | 0 | 100% | 100% | 100% | 100% | 1514 | 17 |
+| **total** | **3,762** | **135** | **3,299** | **0** | **0** | **328** | **100%** | **100%** | **100%** | **100%** | | |
 
-Interactions covered by the lab: capabilities, create ×3, read ×4 (JSON, XML, 410 Gone, 404), update, history-instance, vread, search-type (GET and POST `_search`), transaction, batch, operation (`$everything`), delete. Non-FHIR: the HAPI HTML home page (1.78 MB) and `/favicon.ico`. Full tables: `captures/pcaps/fhir_hapi_evaluation.txt` (recorded) and `captures/evaluation_live.txt` (written by every live test).
+The traffic covers 11 FHIR interaction types (create, read, vread, update, delete, search-type incl. POST `_search`, search-compartment, history-instance, transaction, batch, operation `$everything`), JSON and XML, gzip on/off, keep-alive and one-connection-per-request clients, statuses 200/201/400/404/410, and 328 non-FHIR intranet requests on the same network. Large messages were split into up to 356 TCP segments. The 135 HTTPS calls through the TLS proxy are invisible to the dissector, as expected (0 events), and are reported separately. Details and capture table: [captures/netlab/README.md](captures/netlab/README.md).
 
 **Robustness and performance** (one CPU core, Windows 11 laptop, Python 3.13):
 
 | Check | Result |
 |---|---|
+| Unit tests (`pytest`) | 192 pass: chunked splits at every byte, gzip, HEAD/1xx/204/304/101, shuffled/duplicated/lost segments, missing handshake, IPv6, sequence wrap-around, node configuration, evaluator matching |
 | 100,000 random garbage TCP segments | 0 crashes, 0 internal errors |
-| Speed: 26,000 packets / 1,000 connections / 5,000 events | **~26,500 packets/s** with the fast decoder (scapy decoding: ~3,300 packets/s, identical events) |
-| Memory: 20,000 never-closing connections | ~86 MB without a cap; now capped by `--max-connections` (default 10,000, least-recently-active evicted) |
+| Speed on the lab captures | 1,500–4,400 events/s, 35,000–89,000 packets/s |
+| Memory: 20,000 never-closing connections | capped by `--max-connections` (default 10,000, least-recently-active evicted) |
 
 ---
 
@@ -282,8 +267,8 @@ WantedBy=multi-user.target
 - **No HTTP/2**, and no FHIR Subscriptions over WebSocket (the parser stops at `101 Switching Protocols`).
 - **HTTP/1.1 only**, with responses matched to requests in FIFO order.
 - **No profile validation**: the dissector recognises FHIR; it does not check that resources are valid.
-- **Tested against HAPI FHIR (R4) only**, plus a mock server, in a lab on loopback; no real hospital traffic.
-- Small lab dataset (19 calls per run). Results show correctness on the covered interactions, not performance at scale.
+- **Tested against one server implementation** (HAPI FHIR R4) on an emulated network: separate hosts and realistic packet sizes, but no packet loss, reordering or latency (those cases are covered by the unit tests) and no real hospital traffic. The workflows and their rates are designed, not measured.
+- 3,762 calls in 20 minutes of traffic: correctness on the covered interactions, not performance at scale.
 - XML support is basic (resource type, id, meta, Bundle, OperationOutcome, CapabilityStatement).
 - Detection is heuristic: a non-FHIR API using FHIR-like paths *and* a `resourceType` field would be counted as FHIR.
 
@@ -302,10 +287,12 @@ WantedBy=multi-user.target
 
 ```
 fhir_dissector/   core package (http_parser, reassembly, detector, classifier, body, events, dissector, cli)
-lab/              mock_fhir_server.py, gen_traffic.py, run_scenario.py, evaluate.py
-captures/         pcaps/ = documented PCAP set (kept in git); live test outputs (re-created on every run)
-docs/             FHIR_Dissector_Visual_Guide.pdf, TESTING_GUIDE.md, REPORT_SUMMARY.md, LEARNING_NOTES.md
+netlab/           the emulated hospital network: fhir_node.py, scenari/, docker-compose.yml, labctl.py, lab.ps1/lab.sh
+lab/              evaluate.py (answer key vs. dissector events)
+tests/            unit tests (pytest) + pcap_builder.py (synthetic packets)
+captures/netlab/  one PCAP + answer key + evaluation per scenario, summary.txt
+docs/             TESTING_GUIDE.md, REPORT_SUMMARY.md, LEARNING_NOTES.md, PDFs
 .vscode/          settings, tasks, launch configurations, recommended extensions
 ```
 
-See also: [docs/FHIR_Dissector_Visual_Guide.pdf](docs/FHIR_Dissector_Visual_Guide.pdf) (13-page visual guide with diagrams), [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) (live-server test, step by step), [docs/REPORT_SUMMARY.md](docs/REPORT_SUMMARY.md) (one-page summary for a report), [docs/LEARNING_NOTES.md](docs/LEARNING_NOTES.md) (what we did and why), [FHIR_DISSECTOR_PLAN.md](FHIR_DISSECTOR_PLAN.md) (original plan).
+See also: [docs/FHIR_Dissector_Visual_Guide.pdf](docs/FHIR_Dissector_Visual_Guide.pdf) (13-page visual guide with diagrams), [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) (network lab, step by step), [docs/REPORT_SUMMARY.md](docs/REPORT_SUMMARY.md) (one-page summary for a report), [docs/LEARNING_NOTES.md](docs/LEARNING_NOTES.md) (what we did and why), [FHIR_DISSECTOR_PLAN.md](FHIR_DISSECTOR_PLAN.md) (original plan).

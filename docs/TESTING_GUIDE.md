@@ -1,206 +1,158 @@
-# Testing Guide (Windows) — the dissector on a live FHIR server
+# Testing Guide (Windows) — the FHIR network lab
 
 Follow the steps in order. Each step shows **what to type**, **what you should see**, and **what it means**.
-All commands are for **PowerShell** in VS Code (*Terminal → New Terminal*).
+All commands are for **PowerShell** in VS Code (*Terminal → New Terminal*), in the project folder.
 
-**The idea:** a real FHIR server runs on your PC. The dissector listens to the network *live*. A script plays a hospital app and sends 19 calls (17 FHIR + 2 normal web pages) and writes the *answer key*. At the end we compare what the dissector saw with the answer key.
+**The idea:** Docker builds a small hospital network: a FHIR server (HAPI) and several systems
+(EHR, laboratory, bedside monitors, clinicians, an intranet), each in its own container with its own
+IP and MAC address on one virtual switch, `br-fhir`. A capture container records everything on the
+switch into a PCAP file, and every system writes down the requests it made (the *answer key*). Then
+the dissector reads the PCAP and an evaluator compares its events with the answer key.
 
-> Numbers that change on every run: patient ids (`1000`, `1015`, …), ports (`[::1]:60668`), timestamps, packet counts. Everything else should match.
-
----
-
-## Quick way — 1 click
-
-In VS Code press **Ctrl+Shift+B** (= *Terminal → Run Task… → Run everything (1 click)*). Or in a terminal: `python lab/live_demo.py all`.
-
-It does everything by itself:
-1. starts **Docker Desktop** if it is not running;
-2. starts the **HAPI FHIR server** on port 8080 (or 8090 if 8080 is busy) and waits until it answers — 1–2 minutes the first time, skipped if it already runs;
-3. runs the **live test**: starts the live dissector, sends the 19 calls, stops the dissector, prints its summary and the grade.
-
-**You should see at the end:** `RESULT: PASS (everything matches)`. Press Ctrl+Shift+B again any time to repeat the test (a few seconds once the server runs).
-
-Stop the server when you are done: *Run Task… → Stop FHIR server* (or `python lab/live_demo.py stop`).
-
-**What one run produces (no PCAP files — live mode reads the network directly):**
-
-| File | Content |
-|---|---|
-| `captures/live_events.jsonl` | the results: **one line per request/response** (19 lines) |
-| `captures/live_expected.json` | the answer key written by the traffic generator |
-| `captures/evaluation_live.txt` | the grade (precision, recall, interaction accuracy) |
-
-Each run replaces these files with the new run's results.
-
-**Need PCAP files (recorded traffic, e.g. for Wireshark)?** *Run Task… → Record PCAP* (or `python lab/live_demo.py record`). It records the same 19 calls into `captures/pcaps/fhir_<server>_<date>_<time>.pcap`, with its answer key (`_expected.json`) and the dissector's score (`_evaluation.txt`). A ready-made set is already there: `captures/pcaps/fhir_hapi.pcap` and `fhir_mock.pcap` (see `captures/pcaps/README.md`).
-
-The steps below do the same thing by hand, one command at a time, with explanations.
+> Numbers that change on every run: resource ids, ports, timestamps, exact counts. The results
+> (precision, recall, accuracy, max frame size) should not change.
 
 ---
 
-## Step 1 — Open the project
+## Quick way
+
+Open **Docker Desktop** (wait for *"Engine running"*), then in VS Code press **Ctrl+Shift+B** and
+choose **Network lab: quick run (60 s each)** (about 10 minutes) or **Network lab: all scenarios
+(5 min each)** (about 25 minutes). Same in a terminal:
+
+```powershell
+.\netlab\lab.ps1 generate -Short       # 60 s per scenario
+.\netlab\lab.ps1 generate              # 5 minutes per scenario
+```
+
+**You should see at the end** a summary table with one row per scenario, and 100.00 % in the
+`prec`, `recall`, `inter` and `type` columns; `maxfr` = 1514 (or less).
+
+The steps below do the same thing slowly, so you can see each part.
+
+---
+
+## Step 1 — Open the project and run the unit tests
 
 ```powershell
 cd "C:\Users\muzam\Documents\Packet dissector FHIR"
 .venv\Scripts\activate
+pytest -q
 ```
-**You should see:** the prompt starts with `(.venv)`.
-**Meaning:** you are using the project's own Python with scapy and requests.
+**You should see:** `192 passed` (a few seconds; the first run after a change can take longer).
+**Meaning:** the dissector, the node configuration and the evaluator work on synthetic packets.
+No Docker, no network, no admin rights needed. The last 4 tests re-check the saved network-lab
+captures.
 
 ---
 
-## Step 2 — Choose the port
+## Step 2 — Look at a node file
 
-Another program may already use port 8080 (on this PC an Apache web server sometimes does). Check:
 ```powershell
-Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue
+python netlab\fhir_node.py --node netlab\scenari\ward\clinician-2.ini --show
 ```
-- **No output** → port 8080 is free → use **8080** in all steps below.
-- **Output shown** → 8080 is busy → use **8090** instead (replace `8080` with `8090` everywhere below).
+**You should see:** JSON with `"ip": "10.63.0.26"`, `"mac": "02:63:00:00:00:26"` and one flow with
+`"kind": "clinician"`, `"format": "xml"`, `"keep_alive": false`.
+**Meaning:** this file *is* the second clinician workstation of the ward: it asks for XML and opens a
+new TCP connection for every request. Every system of the lab is described like this
+(`netlab\README.md`, "Node file reference").
 
 ---
 
-## Step 3 — Start the FHIR server (HAPI in Docker)
+## Step 3 — Run one scenario (icu, 60 seconds)
 
-1. Open **Docker Desktop** and wait for *"Engine running"*.
-2. Start HAPI:
+Docker Desktop must be running.
 ```powershell
-docker compose up -d                                   # port 8080
-$env:HAPI_PORT=8090; docker compose up -d              # or: port 8090
+.\netlab\lab.ps1 run -Scenario icu -Duration 60
 ```
-3. Wait 1–2 minutes, then check it is ready:
-```powershell
-curl.exe -s -o NUL -w "%{http_code}" http://localhost:8080/fhir/metadata
+**You should see** (times differ):
 ```
-**You should see:** `200`. (If not: wait 30 s and try again.)
-**Meaning:** a real FHIR R4 server is answering. You can also open http://localhost:8080/fhir/metadata in the browser: a JSON page starting with `"resourceType": "CapabilityStatement"`.
-
-Internet is only needed the very first time (to download the HAPI image). After that everything runs locally.
-
----
-
-## Step 4 — Start the live dissector (Terminal 1)
-
-```powershell
-Remove-Item captures\live_events.jsonl -ErrorAction SilentlyContinue
-python -m fhir_dissector live --bpf "tcp port 8080" --all -o captures/live_events.jsonl
-```
-**You should see:**
-```
-Live capture on '\\Device\\NPF_Loopback' filter='tcp port 8080' (fast decoding; Ctrl+C to stop)
-```
-Then it waits. **Leave this terminal open.**
-**Meaning:** the dissector listens to the loopback "wire" (the network your PC uses to talk to itself) and only to the FHIR server's port. `--all` also reports non-FHIR web calls, so we can check they are *not* labelled FHIR. The old events file is deleted first because live mode *adds* to the file.
-
----
-
-## Step 5 — Send traffic (Terminal 2)
-
-Click **+** in the terminal panel to open a second terminal:
-```powershell
-cd "C:\Users\muzam\Documents\Packet dissector FHIR"
-.venv\Scripts\activate
-python lab/gen_traffic.py --base http://localhost:8080/fhir --out captures/live_expected.json
-```
-**You should see in Terminal 2:** 19 lines such as
-```
-  1 GET    /fhir/metadata                                          -> 200
-  2 POST   /fhir/Patient                                           -> 201
-  ...
- 18 GET    /                                                       -> 200
- 19 GET    /favicon.ico                                            -> 404
-Wrote 19 expected entries to captures\live_expected.json
-```
-**You should see in Terminal 1:** one JSON line appears **for each call, while it happens** (19 lines), e.g.
-```
-{"ts":...,"fhir":{"is_fhir":true,"confidence":1.0,...,"interaction":"read","resource_type":"Patient",...},...}
-```
-**Meaning:** this is the dissector working live: each request/response becomes one event.
-
----
-
-## Step 6 — Stop the live dissector
-
-In **Terminal 1** press **Ctrl+C**.
-**You should see** a summary:
-```
-packets: ~300  tcp: ~300  connections: 2  http exchanges: 19  events written: 19  FHIR events: 17
-  read                 4
-  create               3
-  search-type          2
-  batch                1
-  capabilities         1
-  delete               1
-  history-instance     1
-  operation            1
-  transaction          1
-  update               1
-  vread                1
-```
-**Meaning:** 19 web calls were rebuilt from the packets; 17 were recognised as FHIR, each with its interaction.
-
----
-
-## Step 7 — Grade the result against the answer key
-
-```powershell
-python lab/evaluate.py --events captures/live_events.jsonl --expected captures/live_expected.json
-```
-**You should see:** 19 rows ending in `OK`, then:
-```
-expected calls: 19  events: 19  matched: 19  extra events: 0 (FHIR: 0)
-detection: TP=17 FP=0 FN=0 TN=2  precision=100.0%  recall=100.0%
-interaction accuracy=100.0%  resource type accuracy=100.0%
+[labctl 10:00:00] scenario icu: 3 nodes, 60 s
+[labctl 10:00:00] starting network + HAPI (first start of HAPI takes 1-2 minutes)
+[labctl 10:01:05] HAPI ready at http://10.63.0.10:8080/fhir
+[labctl 10:01:08] capture on br-fhir -> captures/netlab/icu.pcap
+[labctl 10:01:10] clients up: ehr (10.63.0.21), monitor-1 (10.63.0.23), monitor-2 (10.63.0.24)
+[labctl 10:02:13] all clients finished
+[labctl 10:02:19] answer key: captures/netlab/icu_expected.jsonl
+[labctl 10:02:19] lab down
+=== icu ===
+capture: ~5500 frames, 60 s, 1.1 MB, max frame 1514 bytes (0 frames > 1514), 5 TCP connections
+...
+detection: TP=~330 FP=0 FN=0 TN=0  precision=100.00%  recall=100.00%
+interaction accuracy=100.00%  resource type accuracy=100.00%
 RESULT: PASS (everything matches)
 ```
-**Meaning:**
-- **TP** = FHIR calls found, **FP** = false alarms, **FN** = missed FHIR calls, **TN** = normal web calls correctly ignored.
-- **Precision** 100% = every "FHIR" label was right. **Recall** 100% = no FHIR call was missed.
-- **Interaction accuracy** 100% = every call got the right label (read, create, …).
+**Meaning:** the order is the same as in hl7-sim: network + server first, **then** the capture, then
+the clients. `max frame 1514` proves that TCP offload is off: large FHIR responses travel in many
+normal-size segments, as on a real cable.
 
 ---
 
-## Step 8 — Check privacy
+## Step 4 — Open the capture in Wireshark (optional)
 
-```powershell
-Select-String -Path captures\live_events.jsonl -Pattern "Rossi","Mario","1980","Bearer"
-```
-**You should see:** nothing (no output).
-**Meaning:** the traffic contained (made-up) patient names and birth dates, but the dissector stored only metadata — no names, no dates, no search values, no tokens.
+1. Open `captures\netlab\icu.pcap` in Wireshark.
+2. Filter `http` (port 8080 is decoded as HTTP automatically).
+3. *Statistics → Conversations → IPv4*: you see the three clients (10.63.0.21, .23, .24) talking to
+   HAPI (10.63.0.10).
+4. *Statistics → Packet Lengths*: nothing above 1514 bytes.
 
-Look at one event in a readable form:
-```powershell
-Get-Content captures\live_events.jsonl -TotalCount 4 | Select-Object -Last 1 | python -m json.tool
-```
-**You should see:** `"interaction": "read"`, `"resource_type": "Patient"`, `"status": 200`, and a `"signals"` list explaining why it was recognised as FHIR.
+**Meaning:** a real multi-host capture: separate IP and MAC per system, ARP, TCP handshakes, and
+messages split into segments.
 
 ---
 
-## Step 9 — Stop the server
+## Step 5 — Run the dissector on the capture
 
 ```powershell
-docker compose down
+python -m fhir_dissector pcap captures\netlab\icu.pcap -o captures\events.jsonl
 ```
-**You should see:** `Container packetdissectorfhir-hapi-1 Removed`.
+**You should see:** `FHIR events: ~330` and a list by interaction, mostly `create` (vital signs).
+
+Look at one event:
+```powershell
+Get-Content captures\events.jsonl -TotalCount 1 | python -m json.tool
+```
+**You should see:** `"flow": {"client": "10.63.0.2x:...", "server": "10.63.0.10:8080"}` and the FHIR
+interaction and resource type. No patient names, no values.
 
 ---
 
-## Alternative — without Docker (small built-in server)
+## Step 6 — Evaluate one capture by hand
 
-If Docker does not work, use the project's own small FHIR server instead of Step 3:
-
-**Terminal 3** (keep it open):
 ```powershell
-python lab/mock_fhir_server.py --port 8081
+python lab\evaluate.py --pcap captures\netlab\icu.pcap --expected captures\netlab\icu_expected.jsonl
 ```
-Then do Steps 4–7 with **8081** instead of 8080. You should get the same `RESULT: PASS`. Stop the mock server with Ctrl+C.
+**You should see** the same block as at the end of Step 3, ending with `RESULT: PASS`.
+**Meaning:** every request in the answer key was matched, *for the same client IP*, to a dissector
+event with the same method, path and status, within 2 seconds. TP/FP/FN/TN, precision and recall
+are computed on that matching. Encrypted calls (only in `general`) are listed separately as
+"expected not visible".
 
 ---
 
-## VS Code buttons
+## Step 7 — Watch a scenario while it runs
 
-- *Terminal → Run Task…* → `Run everything (1 click)` (also **Ctrl+Shift+B**), `Live test only`, `Record PCAP`, `Start FHIR server`, `Stop FHIR server`.
-- *Run and Debug* (Ctrl+Shift+D) → **Live test (1 click, debuggable)**, **Dissect recorded PCAP**, **Evaluate recorded PCAP**, **Mock FHIR server** → press F5. Put a breakpoint in `fhir_dissector/classifier.py` → `classify()` to watch each live request being classified.
+```powershell
+.\netlab\lab.ps1 up -Scenario ward -Duration 300
+docker compose -p fhir-netlab ps                    # the containers and their state
+docker compose -p fhir-netlab logs -f clinician-2   # one line per request; Ctrl+C to stop watching
+.\netlab\lab.ps1 down                               # stop, merge the answer key
+python lab\evaluate.py --pcap captures\netlab\ward.pcap --expected captures\netlab\ward_expected.jsonl
+```
+**You should see in the logs:** lines like `[ward-round] GET /fhir/Patient -> 200`.
+**Meaning:** `up` leaves the lab running so you can look inside; `down` always cleans up, even after
+an interrupted start.
+
+---
+
+## Step 8 — All scenarios and the summary
+
+```powershell
+.\netlab\lab.ps1 generate
+Get-Content captures\netlab\summary.txt
+```
+**You should see:** four rows (`general`, `ward`, `laboratory`, `icu`) and a TOTAL row, all at
+100.00 %; in `general` the `TLS` column shows the encrypted calls of the secure clinician.
 
 ---
 
@@ -208,12 +160,15 @@ Then do Steps 4–7 with **8081** instead of 8080. You should get the same `RESU
 
 | Problem | What it means | Fix |
 |---|---|---|
-| `.venv\Scripts\activate cannot be loaded because running scripts is disabled` | PowerShell blocks scripts by default | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, or use `.venv\Scripts\python.exe` instead of `python` |
-| `failed to connect to the docker API ... dockerDesktopLinuxEngine` | Docker Desktop is not running | Start Docker Desktop, wait for "Engine running" |
-| Step 3 prints `000` or the browser shows an error | HAPI is still starting (Java takes 1–2 min) | Wait and retry; `docker compose logs --tail 20 hapi` shows `fhirtest.access` lines when ready |
-| Every call returns `404`, or HAPI does not start | Another program (e.g. Apache `httpd`) uses port 8080 | Use port 8090 (Step 2) |
-| `Cannot find created id (status 404)` in Step 5 | The traffic went to a server that is not HAPI | Check Step 2 and Step 3 (`200` from `/fhir/metadata`) on the same port |
-| `error: cannot capture` in Step 4 | No permission to capture | Run the terminal **as Administrator**; reinstall Npcap with *"Support loopback traffic"* |
-| Terminal 1 prints nothing during Step 5 | Wrong port in `--bpf`, or wrong interface | `--bpf` port must equal the server port; the default interface is loopback (`localhost`) |
-| `RESULT: FAIL` with `extra events` | Old events from an earlier run are still in the file | Delete `captures\live_events.jsonl` before Step 4 (live mode appends) |
-| `UnicodeEncodeError` when printing | Old console code page | Use `-o file.jsonl` with `--quiet`, or run `chcp 65001` |
+| `Docker is not running` | Docker Desktop is closed | Start Docker Desktop, wait for "Engine running" |
+| `HAPI did not become ready` | HAPI needs more memory or time | Docker Desktop → Settings → Resources: give it at least 4 GB; run again |
+| `Pool overlaps with other one on this network` | another Docker network uses 10.63.0.0/24 | `.\netlab\lab.ps1 down`; if it persists, remove the other network (`docker network ls`) |
+| `a previous lab is still up: stopping it first` | the last run was interrupted | nothing to do: it cleans up by itself |
+| `capture: 0 frames` | the capture container could not open `br-fhir` | check `docker compose -p fhir-netlab logs capture`; Docker Desktop must use the WSL2 engine |
+| `max frame` above 1514 | offload is still on for some container | check that the node containers have `NET_ADMIN` (see `netlab/docker-compose.yml`) |
+| `RESULT: FAIL` | a mismatch: dissector bug, or the answer key of another run | the report lists each mismatch; use the `_expected.jsonl` of the same run |
+| `.venv\Scripts\activate cannot be loaded` | PowerShell blocks scripts | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, or use `.venv\Scripts\python.exe` |
+
+**Live mode:** `python -m fhir_dissector live` works on real interfaces, but it cannot listen on
+`br-fhir` from Windows: the bridge exists only inside Docker Desktop's Linux VM. The network lab is
+therefore analysed from its captures (which is how the hl7-sim captures are used too).

@@ -300,3 +300,64 @@ python lab/mock_fhir_server.py --port 8081               # small FHIR server wit
 **Deleted (unused / duplicated):** the old recording `captures/lab.pcap` with `captures/expected.json`, `captures/evaluation_lab.txt` and `captures/events.jsonl` (replaced by the documented set in `captures/pcaps/`); the per-run live outputs are no longer kept in git (they are re-created by every live test); `__pycache__` folders; the VS Code debug configurations that were hard-wired to port 8080. Script defaults now point to `captures/pcaps/` and `captures/live_expected.json`.
 
 **Note:** the phase sections above are a diary; commands there that use `captures/lab.pcap` show what we ran at the time. Use the cheat-sheet for today's commands.
+
+---
+
+## The network lab (netlab): a hospital network in Docker
+
+**Why:** until now the dissector was only tested on *loopback* (one machine talking to itself), with one client script and 19 calls. Loopback is not a real network: the kernel hands over giant 64 KB "packets", there is no Ethernet, no ARP, no separate hosts. The new lab, modelled on our lab's HL7 v2 emulator **hl7-sim**, builds a small hospital network instead.
+
+**hl7-sim in short (the design we copied):** one generic program becomes any system from an `.ini` file; each system has its own network namespace (its own IP and MAC) plugged into one Linux bridge; TCP offload is turned off so packets are at most 1500 bytes; every scenario runs 5 minutes with `tcpdump` on the bridge; all data is synthetic and deterministic per seed.
+
+**What we built (`netlab/`):**
+- `fhir_node.py`: one program, many systems. Flow kinds: `ehr` (admissions, transaction Bundles, update/history/vread, delete → 410, stale link → 404), `lab` (orders, delayed results, DiagnosticReport, batch), `monitor` (vital signs every few seconds, sometimes as a batch), `clinician` (multi-parameter searches, XML, `$everything`, POST `_search`, compartment search), `web` (non-FHIR browsing) — plus `[server:web]` for the intranet server. Options: JSON/XML, gzip on/off, keep-alive or one connection per request. Every request goes to the node's answer key (JSONL) with the status it really got.
+- `scenari/general|ward|laboratory|icu`: one `.ini` per system, fixed IP/MAC in 10.63.0.0/24.
+- `docker-compose.yml` + `labctl.py`: networks `br-fhir` (captured) and `br-fhir-back` (not captured), HAPI, helpers, capture; `labctl.py` generates one container per node file and starts everything in hl7-sim's order.
+- `lab.ps1` / `lab.sh`: one script per OS (`generate`, `run`, `up`, `down`, `evaluate`).
+- `lab/evaluate.py`: new multi-client matching (per client IP, method, path, status, closest in time within 2 s), encrypted calls reported separately, capture statistics.
+
+**New words:**
+- **Bridge**: a virtual network switch inside Linux. Containers plug into it with a virtual cable (*veth*).
+- **Docker network / `internal: true`**: Docker creates the bridge for us; *internal* means no route to the internet.
+- **`network_mode: host`**: the container uses the network of the machine that runs Docker — on Docker Desktop that is its Linux VM, where `br-fhir` lives. That is why the capture container can see the bridge.
+- **`network_mode: service:hapi`**: a container that shares another container's network stack (same interfaces). Used to switch HAPI's offload off, because the HAPI image has no shell.
+- **TSO / GSO / GRO (offload)**: the kernel lets the "network card" cut big data into packets. On virtual cables that never happens, so captures show 64 KB frames. Turning it off with `ethtool -K eth0 tso off gso off gro off` gives normal ≤1514-byte frames.
+- **MTU**: the largest packet a network accepts (1500 bytes of IP; 1514 with the Ethernet header). The TCP payload per segment is then 1448 bytes (1500 − 20 IP − 32 TCP with timestamps).
+- **TLS terminator / reverse proxy**: a server (here Caddy) that accepts HTTPS and forwards plain HTTP to the real server. A capture in front of it sees only encrypted traffic.
+
+**Commands:**
+```powershell
+.\netlab\lab.ps1 generate -Short                      # every scenario, 60 s each, then evaluate
+.\netlab\lab.ps1 generate                             # every scenario, 5 min each
+.\netlab\lab.ps1 run -Scenario icu -Duration 60       # one scenario
+.\netlab\lab.ps1 up -Scenario ward ; .\netlab\lab.ps1 down
+python lab\evaluate.py --pcap captures\netlab\icu.pcap --expected captures\netlab\icu_expected.jsonl
+python netlab\fhir_node.py --node netlab\scenari\ward\ehr.ini --show
+```
+
+**Problems hit (and fixes):**
+1. *The reference was missing*: `reference/hl7-sim/` did not exist; we found `hl7-sim.zip` in Downloads, listed it (no unsafe paths), extracted it there, and kept it out of git (read only).
+2. *Tests had been deleted earlier* but the new rules need `pytest`: restored from git history; the real-capture test now checks the network-lab captures.
+3. *HAPI image has no shell* ("distroless", runs as a non-root user): no Docker healthcheck and no `ethtool` inside. Fix: `wait-hapi` polls `/fhir/metadata` from outside; `hapi-offload` shares HAPI's network stack and runs `ethtool` there.
+4. *Would capture work on Docker Desktop for Windows?* Yes: `tcpdump -i br-fhir` in a `network_mode: host` container sees all frames (Ethernet link type, ARP, handshakes). Step-1 proof: max frame 1514 bytes, the 124 KB metadata response in ~86 segments, dissector 4/4.
+5. *TLS proxy design*: if the proxy talked to HAPI on the captured bridge, the decrypted copy would appear as unexpected FHIR traffic. Fix: a second, uncaptured network `br-fhir-back` for proxy → HAPI.
+6. *HAPI answers compartment search (`GET Patient/1/Observation`) with 400*: HAPI does not enable it by default. Kept on purpose: real clients do get such errors, and the exchange is still FHIR (`search-compartment`).
+7. *A cleanup command was blocked* by a safety check (a wildcard delete after changing directory). Fix: write to a new folder instead of emptying one.
+8. *Each scenario was evaluated twice* when generating all scenarios: fixed (evaluate once at the end).
+
+**Clean-up (your request):** the loopback lab (`gen_traffic.py`, `run_scenario.py`, `live_demo.py`, `mock_fhir_server.py`, the root `docker-compose.yml`, the loopback PCAPs) was removed; the six lab scripts became `netlab/lab.ps1` and `netlab/lab.sh`. Everything is still in git history.
+
+**Short runs (60 s per scenario):** 785 calls (29 encrypted) from up to 6 client systems: precision, recall, interaction and resource-type accuracy all 100 %, max frame 1514 bytes, 0 events from the encrypted client.
+
+**Full runs (5 minutes per scenario):**
+
+| Scenario | Clients | Calls | Encrypted | TP | FP | FN | TN | Precision | Recall | Interaction acc. | Max frame |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| general | 6 | 1,080 | 135 | 796 | 0 | 0 | 149 | 100 % | 100 % | 100 % | 1514 |
+| ward | 4 | 683 | 0 | 504 | 0 | 0 | 179 | 100 % | 100 % | 100 % | 1514 |
+| laboratory | 2 | 437 | 0 | 437 | 0 | 0 | 0 | 100 % | 100 % | 100 % | 1514 |
+| icu | 3 | 1,562 | 0 | 1,562 | 0 | 0 | 0 | 100 % | 100 % | 100 % | 1514 |
+
+**Did the new lab find dissector bugs?** No. Every one of the 3,627 readable calls was matched with the right interaction and resource type, with 0 false alarms, even with up to 299 TCP connections per capture and messages split into up to 356 segments. That is a real result, not a missing check: the evaluator reports every mismatch, and the unit tests prove it does (`tests/test_evaluate_netlab.py`). The hard cases (lost and reordered segments) were found and fixed earlier, with the unit tests and the loopback snaplen problem.
+
+**Final report sentence:** Evaluated on 3,627 exchanges from 6 concurrent systems on an emulated hospital network (separate hosts, 1500-byte MTU), over 4 scenarios of 5 minutes each, with automatic ground truth: precision 100 %, recall 100 %, interaction accuracy 100 %.
