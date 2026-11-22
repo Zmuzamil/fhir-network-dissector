@@ -291,8 +291,8 @@ netlab/           the emulated hospital network: fhir_node.py, scenari/, docker-
 lab/              evaluate.py (answer key vs. dissector events)
 tests/            unit tests (pytest) + pcap_builder.py (synthetic packets)
 captures/netlab/  one PCAP + answer key + evaluation per scenario, summary.txt
-docs/             TESTING_GUIDE.md, REPORT_SUMMARY.md, LEARNING_NOTES.md, PDFs
+docs/             TESTING_GUIDE.md (step by step), Project_Overview.pdf (the whole project in pictures)
 .vscode/          settings, tasks, launch configurations, recommended extensions
 ```
 
-See also: [docs/Network_Lab_Guide.pdf](docs/Network_Lab_Guide.pdf) (7-page graphical guide: how the network lab works and how to run it), [docs/FHIR_Dissector_Visual_Guide.pdf](docs/FHIR_Dissector_Visual_Guide.pdf) (13-page visual guide with diagrams), [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) (network lab, step by step), [docs/REPORT_SUMMARY.md](docs/REPORT_SUMMARY.md) (one-page summary for a report), [docs/LEARNING_NOTES.md](docs/LEARNING_NOTES.md) (what we did and why), [FHIR_DISSECTOR_PLAN.md](FHIR_DISSECTOR_PLAN.md) (original plan).
+See also: [docs/Project_Overview.pdf](docs/Project_Overview.pdf) (the whole project in pictures: architecture, network lab, how to run, results), [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) (step-by-step testing), [netlab/README.md](netlab/README.md) (network lab reference), [captures/netlab/README.md](captures/netlab/README.md) (the captures), [FHIR_DISSECTOR_PLAN.md](FHIR_DISSECTOR_PLAN.md) (original plan).
