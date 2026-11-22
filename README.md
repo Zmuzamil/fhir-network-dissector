@@ -295,4 +295,4 @@ docs/             TESTING_GUIDE.md, REPORT_SUMMARY.md, LEARNING_NOTES.md, PDFs
 .vscode/          settings, tasks, launch configurations, recommended extensions
 ```
 
-See also: [docs/FHIR_Dissector_Visual_Guide.pdf](docs/FHIR_Dissector_Visual_Guide.pdf) (13-page visual guide with diagrams), [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) (network lab, step by step), [docs/REPORT_SUMMARY.md](docs/REPORT_SUMMARY.md) (one-page summary for a report), [docs/LEARNING_NOTES.md](docs/LEARNING_NOTES.md) (what we did and why), [FHIR_DISSECTOR_PLAN.md](FHIR_DISSECTOR_PLAN.md) (original plan).
+See also: [docs/Network_Lab_Guide.pdf](docs/Network_Lab_Guide.pdf) (7-page graphical guide: how the network lab works and how to run it), [docs/FHIR_Dissector_Visual_Guide.pdf](docs/FHIR_Dissector_Visual_Guide.pdf) (13-page visual guide with diagrams), [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) (network lab, step by step), [docs/REPORT_SUMMARY.md](docs/REPORT_SUMMARY.md) (one-page summary for a report), [docs/LEARNING_NOTES.md](docs/LEARNING_NOTES.md) (what we did and why), [FHIR_DISSECTOR_PLAN.md](FHIR_DISSECTOR_PLAN.md) (original plan).
