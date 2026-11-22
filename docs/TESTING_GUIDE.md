@@ -1,67 +1,64 @@
 # Testing Guide (Windows)
 
-How to test the FHIR dissector yourself, from zero. Each step: **type** → **you should see** → **what it means**.
+How to test the FHIR dissector yourself. Each step: **type** → **you should see** → **what it means**.
 Use **PowerShell** in VS Code (*Terminal → New Terminal*).
 
 ---
 
-## Before you start (once)
+## Test everything in one go
 
 ```powershell
 cd "C:\Users\muzam\Documents\Packet dissector FHIR"
 .venv\Scripts\activate
+.\netlab\lab.ps1 -Short
 ```
-**You should see:** the prompt starts with `(.venv)`.
+Or in VS Code just press **Ctrl+Shift+B** (task *Test EVERYTHING (1 click, quick)*).
+
+It does all of this by itself (about 12 minutes):
+
+1. starts **Docker Desktop** if it is not running;
+2. runs the **192 unit tests**;
+3. builds the **hospital network** and runs the 4 scenarios (general, ward, laboratory, icu),
+   60 seconds of traffic each, recording everything;
+4. **evaluates** the dissector on each recording and prints one verdict.
+
+**You should see at the end:**
+```
+========================================================================
+unit tests : PASS  (192 passed in ...)
+general    : PASS  (... calls, precision 100%, recall 100%, interaction 100%, max frame 1514)
+ward       : PASS  (...)
+laboratory : PASS  (...)
+icu        : PASS  (...)
+========================================================================
+EVERYTHING PASSED   in 12 minutes
+```
+
+**What it means:** the dissector's parts work (unit tests), and on a realistic hospital network
+— a FHIR server plus EHR, laboratory, monitors, clinicians and an intranet, each with its own IP
+address — it found every FHIR request, labelled each one correctly, and raised no false alarm.
+
+**Full version** (5 minutes per scenario, about 30 minutes; these are the report numbers):
+```powershell
+.\netlab\lab.ps1
+```
+Quick runs are saved in `captures\netlab\quick\`; full runs in `captures\netlab\` (the quick test
+never overwrites the full captures).
+
 If `activate` is blocked: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, then try again.
 
-Open **Docker Desktop** and wait for *"Engine running"* (needed from Test 2 on).
-
 ---
 
-## Test 1 — Unit tests (1 minute, no Docker)
+## Read the results
 
 ```powershell
-pytest -q
+Get-Content captures\netlab\quick\summary.txt      # after the quick run
+Get-Content captures\netlab\summary.txt            # after the full run
 ```
-**You should see:** `192 passed`.
-**Meaning:** every part of the dissector works on made-up packets: shuffled, duplicated and lost
-packets, gzip, chunked bodies, IPv6, FHIR classification, privacy, and the evaluator itself.
-
----
-
-## Test 2 — The hospital network, quick (about 10 minutes)
-
-```powershell
-.\netlab\lab.ps1 generate -Short
-```
-**You should see:** for each of the 4 scenarios (general, ward, laboratory, icu) lines like
-```
-[labctl] HAPI ready at http://10.63.0.10:8080/fhir
-[labctl] capture on br-fhir -> captures/netlab/icu.pcap
-[labctl] clients up: ehr (10.63.0.21), monitor-1 (10.63.0.23), monitor-2 (10.63.0.24)
-[labctl] all clients finished
-```
-and at the end a table with **100.00 %** in `prec`, `recall`, `inter`, `type`, and `1514` in `maxfr`.
-
-**Meaning:** Docker built a small hospital network (a FHIR server + EHR, laboratory, monitors,
-clinicians, an intranet), each system with its own IP address. Everything on the network was
-recorded into a PCAP file, each system wrote down what it sent (the *answer key*), and the
-dissector's results were compared with that answer key.
-
-In VS Code the same: **Ctrl+Shift+B** → *Network lab: quick run (60 s each)*.
-
----
-
-## Test 3 — Read the results
-
-```powershell
-Get-Content captures\netlab\summary.txt
-```
-**You should see:** one row per scenario and a TOTAL row, all at 100.00 %.
 
 | Column | Meaning |
 |---|---|
-| `calls` | requests in the answer key |
+| `calls` | requests in the answer key (what the systems really sent) |
 | `TLS` | encrypted (HTTPS) requests: the dissector cannot read them, so they are counted apart |
 | `TP` | FHIR requests the dissector found |
 | `FP` | false alarms (should be 0) |
@@ -73,50 +70,29 @@ Get-Content captures\netlab\summary.txt
 
 ---
 
-## Test 4 — One scenario, and look inside the result
+## Look deeper (optional)
 
+**One scenario, then one event:**
 ```powershell
 .\netlab\lab.ps1 run -Scenario icu -Duration 60
-python -m fhir_dissector pcap captures\netlab\icu.pcap -o captures\events.jsonl
+python -m fhir_dissector pcap captures\netlab\quick\icu.pcap -o captures\events.jsonl
 Get-Content captures\events.jsonl -TotalCount 1 | python -m json.tool
 ```
-**You should see:** `RESULT: PASS` after the run; then `FHIR events: ...`; then one event with
-`"interaction"`, `"resource_type"` and `"client": "10.63.0.2x:..."`, and **no** patient names or values.
-**Meaning:** this is what the dissector produces: one short, private line per request.
+**You should see:** `RESULT: PASS`, then `FHIR events: ...`, then one event with `"interaction"`,
+`"resource_type"` and `"client": "10.63.0.2x:..."` — and **no** patient names or values.
 
----
-
-## Test 5 — Watch the systems while they work
-
+**Watch the systems while they work:**
 ```powershell
-.\netlab\lab.ps1 up -Scenario ward -Duration 300
-docker compose -p fhir-netlab ps
-docker compose -p fhir-netlab logs -f clinician-2
-```
-**You should see:** the containers `Up`, then log lines like `[ward-round] GET /fhir/Patient -> 200`.
-Press **Ctrl+C** to stop watching, then:
-```powershell
+.\netlab\lab.ps1 up -Scenario ward
+docker compose -p fhir-netlab logs -f clinician-2      # Ctrl+C to stop watching
 .\netlab\lab.ps1 down
-python lab\evaluate.py --pcap captures\netlab\ward.pcap --expected captures\netlab\ward_expected.jsonl
 ```
-**You should see:** `lab down`, then the evaluation ending with `RESULT: PASS`.
+**You should see:** log lines like `[ward-round] GET /fhir/Patient -> 200`, then `lab down`.
 
----
+**Only the unit tests** (seconds, no Docker): `pytest -q` → `192 passed`.
 
-## Test 6 — Full captures for the report (about 28 minutes)
-
-```powershell
-.\netlab\lab.ps1 generate
-```
-**You should see:** the same as Test 2, with about 3,700 calls in total (5 minutes per scenario).
-These are the numbers in the report sentence.
-
----
-
-## Optional — Look at a capture in Wireshark
-
-Open `captures\netlab\general.pcap`, filter `http`, then *Statistics → Conversations → IPv4*:
-you see each hospital system (10.63.0.2x) talking to the FHIR server (10.63.0.10).
+**Wireshark:** open `captures\netlab\general.pcap`, filter `http`, then *Statistics →
+Conversations → IPv4*: each hospital system (10.63.0.2x) talks to the FHIR server (10.63.0.10).
 
 ---
 
@@ -124,9 +100,9 @@ you see each hospital system (10.63.0.2x) talking to the FHIR server (10.63.0.10
 
 | You see | Fix |
 |---|---|
-| `Docker is not running` | start Docker Desktop, wait for "Engine running" |
+| `Docker is not running` | Docker Desktop did not start by itself: open it, wait for "Engine running", run again |
 | `HAPI did not become ready` | Docker Desktop → Settings → Resources: at least 4 GB memory; run again |
-| `a previous lab is still up` | nothing to do: it cleans up by itself |
+| `unit tests : FAIL` | the lines above the verdict show which test failed |
+| `SOMETHING FAILED` for a scenario | open its `_evaluation.txt`: the `MISMATCHES` lines show each problem |
 | you stopped a run halfway | `.\netlab\lab.ps1 down` |
-| `RESULT: FAIL` | read the `MISMATCHES` lines; use the answer key of the same run |
 | `running scripts is disabled` | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |

@@ -31,8 +31,7 @@ FHIR is not a binary protocol: it is a REST API on top of HTTP, with JSON or XML
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
-pytest -q
-DURATION=60 ./netlab/lab.sh generate
+DURATION=60 ./netlab/lab.sh       # everything in one go: unit tests + 4 scenarios + verdict
 ```
 
 ---
@@ -43,13 +42,19 @@ DURATION=60 ./netlab/lab.sh generate
 
 [`netlab/`](netlab/README.md) builds a small hospital network in Docker: HAPI FHIR and several systems (EHR, laboratory, bedside monitors, clinician workstations, an intranet server and browser, an HTTPS proxy), each in its own container with its own IP and MAC on the bridge `br-fhir`. A capture container records the bridge; every client writes an answer key; the evaluator compares the dissector with it.
 
+**Everything in one go** (starts Docker Desktop if needed, runs the unit tests, all 4 scenarios, the evaluation, and prints one verdict `EVERYTHING PASSED`):
 ```powershell
-.\netlab\lab.ps1 generate                 # every scenario, 5 min each, then evaluate (~28 min)
-.\netlab\lab.ps1 generate -Short          # 60 s each (~10 min)
+.\netlab\lab.ps1 -Short                   # 60 s per scenario (~12 min); in VS Code: Ctrl+Shift+B
+.\netlab\lab.ps1                          # 5 min per scenario (~30 min): the report numbers
+```
+Other actions:
+```powershell
+.\netlab\lab.ps1 generate -Short          # only the scenarios + evaluation (no unit tests)
 .\netlab\lab.ps1 run -Scenario icu        # one scenario
 .\netlab\lab.ps1 up -Scenario ward ; .\netlab\lab.ps1 down
+.\netlab\lab.ps1 evaluate                 # re-evaluate the saved captures
 ```
-In VS Code: **Ctrl+Shift+B** → *Network lab: all scenarios* or *quick run*. Results: `captures/netlab/` (PCAP, answer key, evaluation per scenario, `summary.txt`).
+Results: `captures/netlab/` (PCAP, answer key, evaluation per scenario, `summary.txt`). Quick runs (< 5 min) go to `captures/netlab/quick/`, so they never overwrite the full captures.
 
 ### Offline (PCAP / PCAPNG)
 
@@ -78,7 +83,7 @@ Each event is printed as one JSON line when the response completes. Press **Ctrl
 
 ### VS Code
 
-- **Tasks** (*Terminal → Run Task*): *Network lab: all scenarios (5 min each)*, *Network lab: quick run (60 s each)* (both on **Ctrl+Shift+B**), *Network lab: evaluate captures*, *Network lab: stop (down)*, *Run unit tests*.
+- **Tasks** (*Terminal → Run Task*): *Test EVERYTHING (1 click, quick)* (**Ctrl+Shift+B**), *Test EVERYTHING (full, 5 min per scenario)*, *Network lab: evaluate captures*, *Network lab: stop (down)*, *Run unit tests*.
 - **Debug configurations**: *Network lab: run icu (60 s)*, *Dissect a network-lab capture*, *Evaluate a network-lab capture*, *Show a node config*, *Debug current test file*.
 
 ### As a library (integration point)

@@ -11,3 +11,4 @@ reference/
 captures/netlab/run/
 netlab/compose.scenario.yml
 netlab/.run/
+captures/netlab/quick/

@@ -2,8 +2,8 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Network lab: all scenarios (5 min each)",
-      "detail": "Ctrl+Shift+B: build the hospital network, capture every scenario, evaluate (~25 min)",
+      "label": "Test EVERYTHING (1 click, quick)",
+      "detail": "Ctrl+Shift+B: Docker + unit tests + 4 scenarios x 60 s + verdict (~12 min)",
       "type": "process",
       "command": "${workspaceFolder}/.venv/Scripts/python.exe",
       "options": {
@@ -17,37 +17,35 @@
       "problemMatcher": [],
       "args": [
         "netlab/labctl.py",
-        "generate",
-        "--duration",
-        "300"
-      ],
-      "group": {
-        "kind": "build"
-      }
-    },
-    {
-      "label": "Network lab: quick run (60 s each)",
-      "detail": "Ctrl+Shift+B: same with 60 s per scenario (~10 min)",
-      "type": "process",
-      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "clear": true
-      },
-      "problemMatcher": [],
-      "args": [
-        "netlab/labctl.py",
-        "generate",
+        "all",
         "--duration",
         "60"
       ],
       "group": {
-        "kind": "build"
+        "kind": "build",
+        "isDefault": true
       }
+    },
+    {
+      "label": "Test EVERYTHING (full, 5 min per scenario)",
+      "detail": "Docker + unit tests + 4 scenarios x 5 min + verdict (~30 min)",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "args": [
+        "netlab/labctl.py",
+        "all",
+        "--duration",
+        "300"
+      ]
     },
     {
       "label": "Network lab: evaluate captures",
@@ -70,7 +68,7 @@
     },
     {
       "label": "Network lab: stop (down)",
-      "detail": "Stop containers and networks, merge answer keys (safe after an interrupted run)",
+      "detail": "Stop containers and networks (safe after an interrupted run)",
       "type": "process",
       "command": "${workspaceFolder}/.venv/Scripts/python.exe",
       "options": {
@@ -89,7 +87,7 @@
     },
     {
       "label": "Run unit tests",
-      "detail": "pytest (no Docker, no network, no admin)",
+      "detail": "pytest only (no Docker)",
       "type": "process",
       "command": "${workspaceFolder}/.venv/Scripts/python.exe",
       "options": {

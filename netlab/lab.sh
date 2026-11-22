@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # FHIR network lab - one script for everything (Linux/macOS).
 #
+#   ./netlab/lab.sh                             EVERYTHING in one go (unit tests, all scenarios, verdict)
 #   ./netlab/lab.sh generate [SCENARIO ...]     every (or the given) scenario, then evaluate
 #   ./netlab/lab.sh run SCENARIO                one scenario: up + wait + down + evaluate
 #   ./netlab/lab.sh up SCENARIO                 start one scenario and leave it running
@@ -10,8 +11,9 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 py="$here/../.venv/bin/python"; [ -x "$py" ] || py=python3
-action="${1:?action: generate | run | up | down | evaluate}"; shift
+action="${1:-all}"; shift || true
 case "$action" in
+    all)       exec "$py" "$here/labctl.py" all --duration "${DURATION:-300}" ;;
     generate)  exec "$py" "$here/labctl.py" generate "$@" --duration "${DURATION:-300}" ;;
     run|up)    exec "$py" "$here/labctl.py" "$action" "${1:?scenario: general|ward|laboratory|icu}" --duration "${DURATION:-300}" ;;
     down|evaluate) exec "$py" "$here/labctl.py" "$action" "$@" ;;

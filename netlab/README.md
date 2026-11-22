@@ -16,10 +16,8 @@ vital signs and lab values. No real person is represented.
 fhir_node.py            the generic node: FHIR client workflows, or a plain web server
 scenari/                one folder per network: general/, ward/, laboratory/, icu/ (one .ini per node)
 docker-compose.yml      base services: networks, HAPI FHIR, readiness/offload helpers, capture
-labctl.py               up / down / run / generate / evaluate (used by the scripts below)
-lab-up.ps1   lab-up.sh             start a scenario with the capture on
-lab-down.ps1 lab-down.sh           stop it, merge the answer keys (works after an interrupted start)
-generate-captures.ps1 / .sh        every scenario in turn, then evaluate them all
+labctl.py               all / up / down / run / generate / evaluate (does the work)
+lab.ps1, lab.sh         the one script to type (Windows / Linux-macOS); default action = everything
 Dockerfile, node-entrypoint.sh     the node image: Python + requests + ethtool + tcpdump
 ```
 
@@ -114,18 +112,16 @@ exchanges, message mix) and the evaluation results.
 ## Usage
 
 ```powershell
-.\netlab\generate-captures.ps1                 # every scenario, 5 min each, then evaluate (~25 min)
-.\netlab\generate-captures.ps1 -Short          # 60 s each (~10 min)
-.\netlab\generate-captures.ps1 -Scenarios icu,ward -Duration 120
-
-.\netlab\lab-up.ps1 -Scenario ward -Duration 300   # start one scenario and leave it running
-.\netlab\lab-down.ps1                              # stop it and merge its answer key
-python netlab\labctl.py evaluate                   # (re)evaluate everything in captures/netlab/
+.\netlab\lab.ps1 -Short                        # EVERYTHING: Docker, unit tests, 4 scenarios x 60 s, verdict
+.\netlab\lab.ps1                               # the same with 5 min per scenario (the report captures)
+.\netlab\lab.ps1 generate -Scenario icu,ward -Duration 120   # chosen scenarios only
+.\netlab\lab.ps1 up -Scenario ward             # start one scenario and leave it running
+.\netlab\lab.ps1 down                          # stop it and merge its answer key
+.\netlab\lab.ps1 evaluate                      # (re)evaluate everything in captures/netlab/
 ```
 
-Linux/macOS: `./netlab/generate-captures.sh`, `DURATION=60 ./netlab/generate-captures.sh icu`,
-`./netlab/lab-up.sh ward 300`, `./netlab/lab-down.sh`. In VS Code: **Ctrl+Shift+B** →
-*Network lab: all scenarios* or *Network lab: quick run*.
+Runs shorter than 5 minutes write to `captures/netlab/quick/`. Linux/macOS: `DURATION=60 ./netlab/lab.sh`,
+`./netlab/lab.sh up ward`, `./netlab/lab.sh down`. In VS Code: **Ctrl+Shift+B** = everything (quick).
 
 Only one network lab can run at a time. While a scenario is up, the logs are visible with
 `docker compose -p fhir-netlab logs -f ehr`. Check a node file without Docker:
