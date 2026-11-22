@@ -13,3 +13,7 @@ captures/evaluation_live.txt
 # third-party reference material (read only)
 reference/
 .pytest_cache/
+captures/netlab/try*/
+captures/netlab/run/
+netlab/compose.scenario.yml
+netlab/.run/
