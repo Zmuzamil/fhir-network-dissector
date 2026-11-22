@@ -200,6 +200,10 @@ Live events were identical to offline events (same method, interaction, type, FH
 
 ```powershell
 .venv\Scripts\activate                                   # enter the venv
+python lab/live_demo.py all                              # 1 CLICK (= Ctrl+Shift+B): Docker + HAPI + live test + grade
+python lab/live_demo.py record                           # save a PCAP (+ answer key + score) in captures/pcaps/
+python lab/live_demo.py stop                             # stop HAPI
+# --- the same by hand ---
 Get-NetTCPConnection -LocalPort 8080 -State Listen       # port busy? then use 8090 everywhere
 docker compose up -d                                     # start HAPI on 8080 | docker compose down = stop
 $env:HAPI_PORT=8090; docker compose up -d                # ... or on 8090 if 8080 is busy
@@ -209,10 +213,9 @@ python lab/gen_traffic.py --base http://localhost:8080/fhir --out captures/live_
 python lab/evaluate.py --events captures/live_events.jsonl --expected captures/live_expected.json
 # as a service (after `pip install .`)
 fhir-dissector live --iface "Ethernet" --bpf "tcp port 8080" -o C:\fhir\events.jsonl --quiet
-# optional: record once, analyse the file later
-python lab/run_scenario.py --base http://localhost:8080/fhir --port 8080 --out captures/lab.pcap --expected captures/expected.json
-python -m fhir_dissector pcap captures/lab.pcap -o captures/events.jsonl
-python lab/evaluate.py --pcap captures/lab.pcap --expected captures/expected.json
+# analyse a recorded capture
+python -m fhir_dissector pcap captures/pcaps/fhir_hapi.pcap -o captures/events.jsonl
+python lab/evaluate.py --pcap captures/pcaps/fhir_hapi.pcap --expected captures/pcaps/fhir_hapi_expected.json
 python lab/mock_fhir_server.py --port 8081               # small FHIR server without Docker
 ```
 
@@ -287,3 +290,13 @@ python lab/mock_fhir_server.py --port 8081               # small FHIR server wit
 **Tip:** Wireshark only decodes HTTP on its usual ports. For 8090/8081 use *Analyze → Decode As… → TCP port → HTTP*.
 
 **Privacy:** the PCAPs contain full message contents (only synthetic patients). Redaction applies to the dissector's events, not to raw captures — never share PCAPs of real patient traffic.
+
+---
+
+## Final clean-up and 1-click run
+
+**1 click:** `python lab/live_demo.py all` (VS Code: **Ctrl+Shift+B**, task *Run everything (1 click)*) starts Docker Desktop if needed, starts HAPI (8080, or 8090 if busy), waits until it answers, then runs the live test and prints the grade.
+
+**Deleted (unused / duplicated):** the old recording `captures/lab.pcap` with `captures/expected.json`, `captures/evaluation_lab.txt` and `captures/events.jsonl` (replaced by the documented set in `captures/pcaps/`); the per-run live outputs are no longer kept in git (they are re-created by every live test); `__pycache__` folders; the VS Code debug configurations that were hard-wired to port 8080. Script defaults now point to `captures/pcaps/` and `captures/live_expected.json`.
+
+**Note:** the phase sections above are a diary; commands there that use `captures/lab.pcap` show what we ran at the time. Use the cheat-sheet for today's commands.

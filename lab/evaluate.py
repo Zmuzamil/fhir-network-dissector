@@ -2,8 +2,8 @@
 
 Usage::
 
-    python lab/evaluate.py --pcap captures/lab.pcap --expected captures/expected.json
-    python lab/evaluate.py --events captures/live_events.jsonl --expected captures/expected.json
+    python lab/evaluate.py --pcap captures/pcaps/fhir_hapi.pcap --expected captures/pcaps/fhir_hapi_expected.json
+    python lab/evaluate.py --events captures/live_events.jsonl --expected captures/live_expected.json
 
 With ``--pcap`` the dissector runs with ``emit_non_fhir=True``. With ``--events`` an existing
 JSONL file is evaluated (e.g. from live mode; produce it with ``--all`` for full results).
@@ -120,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
     src = ap.add_mutually_exclusive_group(required=True)
     src.add_argument("--pcap", help="capture to dissect")
     src.add_argument("--events", help="existing events JSONL (e.g. from live mode with --all)")
-    ap.add_argument("--expected", default="captures/expected.json")
+    ap.add_argument("--expected", required=True, help="answer key (*_expected.json) of the same run")
     args = ap.parse_args(argv)
 
     expected = json.loads(Path(args.expected).read_text(encoding="utf-8"))

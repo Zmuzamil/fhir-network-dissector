@@ -38,38 +38,40 @@ FHIR is not a binary protocol: it is a REST API on top of HTTP, with JSON or XML
 ```bash
 python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
 docker compose up -d
-sudo .venv/bin/python lab/run_scenario.py --out captures/lab.pcap      # capture needs root
+sudo .venv/bin/python lab/live_demo.py all                           # capture needs root
 ```
 The loopback interface is `lo` (Linux) or `lo0` (macOS), chosen automatically.
 
 ### Without Docker (fallback)
 
 ```powershell
-python lab/mock_fhir_server.py --port 8081           # terminal 1
-python lab/run_scenario.py --base http://localhost:8081/fhir --port 8081 --out captures/mock_lab.pcap --expected captures/mock_expected.json
+python lab/mock_fhir_server.py --port 8081           # terminal 1 (keep open)
+python lab/live_demo.py run                          # terminal 2: finds the mock server by itself
 ```
 
 ---
 
 ## 2. Usage
 
-### Quickest: live test in 2 buttons
+### 1 click: run everything
 
+In VS Code press **Ctrl+Shift+B** (task *Run everything (1 click)*), or in a terminal:
 ```powershell
-python lab/live_demo.py start    # 1: start HAPI (8080, or 8090 if busy) and wait until ready
-python lab/live_demo.py run      # 2: live dissector + 19 calls + grade -> RESULT: PASS
+python lab/live_demo.py all
 ```
-In VS Code: *Run Task → 1 Start FHIR server*, then **Ctrl+Shift+B**. Results: `captures/live_events.jsonl` (one line per request/response), grade in `captures/evaluation_live.txt`.
+It starts Docker Desktop if needed, starts HAPI (port 8080, or 8090 if 8080 is busy) and waits until it answers, then runs the live test: live dissector + 19 calls + grade, ending with `RESULT: PASS`. The first time HAPI needs 1–2 minutes to start; after that a run takes a few seconds. Results: `captures/live_events.jsonl` (one line per request/response) and the grade in `captures/evaluation_live.txt`.
 
-**PCAP files:** `python lab/live_demo.py record` (task *3 Record PCAP*) records the traffic into `captures/pcaps/`. A ready-made, documented set is in [captures/pcaps/](captures/pcaps/README.md): `fhir_hapi.pcap` (HAPI FHIR R4) and `fhir_mock.pcap`, each with ground truth and score (both 100%).
+Other actions: `run` (live test only), `record` (save a PCAP), `start`, `stop` — also as VS Code tasks.
+
+**PCAP files:** `python lab/live_demo.py record` (task *Record PCAP*) records the traffic into `captures/pcaps/`. A ready-made, documented set is in [captures/pcaps/](captures/pcaps/README.md): `fhir_hapi.pcap` (HAPI FHIR R4) and `fhir_mock.pcap`, each with ground truth and score (both 100%).
 
 ### Offline (PCAP / PCAPNG)
 
 ```powershell
-python -m fhir_dissector pcap captures/lab.pcap -o captures/events.jsonl
-python -m fhir_dissector pcap captures/lab.pcap --all              # also non-FHIR HTTP (is_fhir: false)
-python -m fhir_dissector pcap captures/lab.pcap --no-redact        # keep search values (patient data!)
-python -m fhir_dissector pcap captures/lab.pcap --min-confidence 0.8
+python -m fhir_dissector pcap captures/pcaps/fhir_hapi.pcap -o captures/events.jsonl
+python -m fhir_dissector pcap captures/pcaps/fhir_hapi.pcap --all          # also non-FHIR HTTP (is_fhir: false)
+python -m fhir_dissector pcap captures/pcaps/fhir_hapi.pcap --no-redact    # keep search values (patient data!)
+python -m fhir_dissector pcap captures/pcaps/fhir_hapi.pcap --min-confidence 0.8
 ```
 Without `-o`, events are printed to the terminal. A summary (packets, connections, events, FHIR events per interaction) is always printed at the end.
 
@@ -86,15 +88,16 @@ Each event is printed as one JSON line when the response completes. Press **Ctrl
 
 | Command | What it does |
 |---|---|
-| `python lab/gen_traffic.py --base http://localhost:8080/fhir --out captures/expected.json` | 19 scripted calls (17 FHIR + 2 non-FHIR); writes the ground truth |
-| `python lab/run_scenario.py --base http://localhost:8080/fhir --port 8080 --out captures/lab.pcap` | capture → traffic → save PCAP + `expected.json` |
-| `python lab/evaluate.py --pcap captures/lab.pcap --expected captures/expected.json` | table + precision / recall / accuracy; exit 0 only if all match |
+| `python lab/live_demo.py all \| start \| run \| record \| stop` | the 1-click helper (used by the VS Code tasks) |
+| `python lab/gen_traffic.py --base http://localhost:8080/fhir --out captures/live_expected.json` | 19 scripted calls (17 FHIR + 2 non-FHIR); writes the ground truth |
+| `python lab/run_scenario.py --base http://localhost:8080/fhir --port 8080 --out captures/pcaps/x.pcap --expected captures/pcaps/x_expected.json` | capture → traffic → save PCAP + ground truth (used by `record`) |
+| `python lab/evaluate.py --pcap captures/pcaps/fhir_hapi.pcap --expected captures/pcaps/fhir_hapi_expected.json` | table + precision / recall / accuracy; exit 0 only if all match |
 | `python lab/evaluate.py --events captures/live_events.jsonl --expected captures/live_expected.json` | evaluate events from a live run (use `live --all`) |
 
 ### VS Code
 
-- **Tasks** (*Terminal → Run Task*): `1 Start FHIR server`, `2 Run live test` (default build task: **Ctrl+Shift+B**), `3 Record PCAP`, `Stop FHIR server`. They call `lab/live_demo.py start | run | record | stop`.
-- **Debug configurations** (*Run and Debug*): *Dissect lab PCAP*, *Live capture (needs admin)*, *Mock FHIR server*, *Generate traffic*, *Evaluate*.
+- **Tasks** (*Terminal → Run Task*): `Run everything (1 click)` (**Ctrl+Shift+B**), `Live test only`, `Record PCAP`, `Start FHIR server`, `Stop FHIR server`. They call `lab/live_demo.py all | run | record | start | stop`.
+- **Debug configurations** (*Run and Debug*): *Live test (1 click, debuggable)*, *Dissect recorded PCAP*, *Evaluate recorded PCAP*, *Mock FHIR server*.
 
 ### As a library (integration point)
 
@@ -185,11 +188,11 @@ One JSON object per line (JSONL). Example (a real event from the lab, redacted b
 
 | Run | Calls | TP | FP | FN | TN | Precision | Recall | Interaction accuracy | Resource-type accuracy |
 |---|---|---|---|---|---|---|---|---|---|
-| Offline (`captures/lab.pcap`, 268 packets) | 19 | 17 | 0 | 0 | 2 | **100%** | **100%** | **100%** | **100%** |
+| Recorded (`captures/pcaps/fhir_hapi.pcap`, 238 packets) | 19 | 17 | 0 | 0 | 2 | **100%** | **100%** | **100%** | **100%** |
 | Live capture, fast decoder (312 packets) | 19 | 17 | 0 | 0 | 2 | **100%** | **100%** | **100%** | **100%** |
 | Mock server (fallback) | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% | 100% |
 
-Interactions covered by the lab: capabilities, create ×3, read ×4 (JSON, XML, 410 Gone, 404), update, history-instance, vread, search-type (GET and POST `_search`), transaction, batch, operation (`$everything`), delete. Non-FHIR: the HAPI HTML home page (1.78 MB) and `/favicon.ico`. Full tables: `captures/evaluation_lab.txt`, `captures/evaluation_live.txt`.
+Interactions covered by the lab: capabilities, create ×3, read ×4 (JSON, XML, 410 Gone, 404), update, history-instance, vread, search-type (GET and POST `_search`), transaction, batch, operation (`$everything`), delete. Non-FHIR: the HAPI HTML home page (1.78 MB) and `/favicon.ico`. Full tables: `captures/pcaps/fhir_hapi_evaluation.txt` (recorded) and `captures/evaluation_live.txt` (written by every live test).
 
 **Robustness and performance** (one CPU core, Windows 11 laptop, Python 3.13):
 
@@ -300,7 +303,7 @@ WantedBy=multi-user.target
 ```
 fhir_dissector/   core package (http_parser, reassembly, detector, classifier, body, events, dissector, cli)
 lab/              mock_fhir_server.py, gen_traffic.py, run_scenario.py, evaluate.py
-captures/         lab.pcap, expected.json, events.jsonl, evaluation reports (PCAP/JSONL git-ignored)
+captures/         pcaps/ = documented PCAP set (kept in git); live test outputs (re-created on every run)
 docs/             FHIR_Dissector_Visual_Guide.pdf, TESTING_GUIDE.md, REPORT_SUMMARY.md, LEARNING_NOTES.md
 .vscode/          settings, tasks, launch configurations, recommended extensions
 ```

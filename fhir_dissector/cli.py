@@ -2,8 +2,8 @@
 
 Examples::
 
-    python -m fhir_dissector pcap captures/lab.pcap -o captures/events.jsonl
-    python -m fhir_dissector pcap captures/lab.pcap --all --no-redact
+    python -m fhir_dissector pcap captures/pcaps/fhir_hapi.pcap -o captures/events.jsonl
+    python -m fhir_dissector pcap captures/pcaps/fhir_hapi.pcap --all --no-redact
     python -m fhir_dissector live --bpf "tcp port 8080" -o captures/live_events.jsonl --quiet
 
 Both modes end in the same code path (FhirDissector). Classic PCAP files and libpcap live

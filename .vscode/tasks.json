@@ -2,14 +2,10 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "1 Start FHIR server",
-      "detail": "Starts HAPI in Docker (port 8080, or 8090 if busy) and waits until it is ready",
+      "label": "Run everything (1 click)",
+      "detail": "Ctrl+Shift+B: starts Docker + HAPI if needed, then the live test with grade",
       "type": "process",
       "command": "${workspaceFolder}/.venv/Scripts/python.exe",
-      "args": [
-        "lab/live_demo.py",
-        "start"
-      ],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -18,40 +14,21 @@
         "panel": "shared",
         "clear": true
       },
-      "problemMatcher": []
-    },
-    {
-      "label": "2 Run live test",
-      "detail": "Live dissector + 19 FHIR calls + grade (shortcut: Ctrl+Shift+B)",
-      "type": "process",
-      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "problemMatcher": [],
       "args": [
         "lab/live_demo.py",
-        "run"
+        "all"
       ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
       "group": {
         "kind": "build",
         "isDefault": true
-      },
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "clear": true
-      },
-      "problemMatcher": []
+      }
     },
     {
-      "label": "3 Record PCAP",
-      "detail": "Records the 19 calls into captures/pcaps/ (pcap + answer key + score)",
+      "label": "Live test only",
+      "detail": "Server must already run: live dissector + 19 calls + grade",
       "type": "process",
       "command": "${workspaceFolder}/.venv/Scripts/python.exe",
-      "args": [
-        "lab/live_demo.py",
-        "record"
-      ],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -60,17 +37,55 @@
         "panel": "shared",
         "clear": true
       },
-      "problemMatcher": []
+      "problemMatcher": [],
+      "args": [
+        "lab/live_demo.py",
+        "run"
+      ]
+    },
+    {
+      "label": "Record PCAP",
+      "detail": "Records the 19 calls into captures/pcaps/ (pcap + answer key + score)",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "args": [
+        "lab/live_demo.py",
+        "record"
+      ]
+    },
+    {
+      "label": "Start FHIR server",
+      "detail": "Starts HAPI (8080, or 8090 if busy) and waits until ready",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "args": [
+        "lab/live_demo.py",
+        "start"
+      ]
     },
     {
       "label": "Stop FHIR server",
       "detail": "Stops the HAPI container",
       "type": "process",
       "command": "${workspaceFolder}/.venv/Scripts/python.exe",
-      "args": [
-        "lab/live_demo.py",
-        "stop"
-      ],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -79,7 +94,11 @@
         "panel": "shared",
         "clear": true
       },
-      "problemMatcher": []
+      "problemMatcher": [],
+      "args": [
+        "lab/live_demo.py",
+        "stop"
+      ]
     }
   ]
 }

@@ -2,13 +2,24 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Dissect lab PCAP",
+      "name": "Live test (1 click, debuggable)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/lab/live_demo.py",
+      "args": [
+        "all"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Dissect recorded PCAP",
       "type": "debugpy",
       "request": "launch",
       "module": "fhir_dissector",
       "args": [
         "pcap",
-        "captures/lab.pcap",
+        "captures/pcaps/fhir_hapi.pcap",
         "-o",
         "captures/events.jsonl"
       ],
@@ -16,14 +27,15 @@
       "console": "integratedTerminal"
     },
     {
-      "name": "Live capture (needs admin)",
+      "name": "Evaluate recorded PCAP",
       "type": "debugpy",
       "request": "launch",
-      "module": "fhir_dissector",
+      "program": "${workspaceFolder}/lab/evaluate.py",
       "args": [
-        "live",
-        "--bpf",
-        "tcp port 8080"
+        "--pcap",
+        "captures/pcaps/fhir_hapi.pcap",
+        "--expected",
+        "captures/pcaps/fhir_hapi_expected.json"
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal"
@@ -33,34 +45,6 @@
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/lab/mock_fhir_server.py",
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal"
-    },
-    {
-      "name": "Generate traffic",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "${workspaceFolder}/lab/gen_traffic.py",
-      "args": [
-        "--base",
-        "http://localhost:8080/fhir",
-        "--out",
-        "captures/expected.json"
-      ],
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal"
-    },
-    {
-      "name": "Evaluate",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "${workspaceFolder}/lab/evaluate.py",
-      "args": [
-        "--pcap",
-        "captures/lab.pcap",
-        "--expected",
-        "captures/expected.json"
-      ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal"
     }

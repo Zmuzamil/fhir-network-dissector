@@ -1,8 +1,12 @@
 .venv/
 __pycache__/
 *.pyc
+# outputs that are re-created on every run
 captures/*.pcap
 captures/*.pcapng
 captures/*.jsonl
-!captures/pcaps/*.pcap
 captures/*.zip
+captures/live_expected.json
+captures/evaluation_live.txt
+# the documented PCAP set IS kept in git
+!captures/pcaps/*.pcap

@@ -1,9 +1,10 @@
-"""Two-button live test: ``start`` the FHIR server, then ``run`` the whole live test.
+"""One-click live test of the FHIR dissector (and helpers to start/stop the server, record PCAPs).
 
 Usage::
 
-    python lab/live_demo.py start     # button 1: start HAPI (port 8080, or 8090 if 8080 is busy)
-    python lab/live_demo.py run       # button 2: live dissector + 19 calls + grade
+    python lab/live_demo.py all       # 1 click: Docker + HAPI if needed, then the live test
+    python lab/live_demo.py start     # only start HAPI (port 8080, or 8090 if 8080 is busy)
+    python lab/live_demo.py run       # only the live test: live dissector + 19 calls + grade
     python lab/live_demo.py record    # record the 19 calls into a PCAP file (+ answer key + score)
     python lab/live_demo.py stop      # stop HAPI
 
@@ -69,12 +70,43 @@ def find_server() -> int | None:
     return next((p for p in CANDIDATE_PORTS if fhir_ready(p)), None)
 
 
-# ------------------------------------------------------------------ button 1
+DOCKER_DESKTOP = Path(r"C:\Program Files\Docker\Docker\Docker Desktop.exe")
+
+
+def docker_ready() -> bool:
+    try:
+        return subprocess.run(["docker", "version"], capture_output=True, timeout=20).returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def ensure_docker() -> bool:
+    """Make sure the Docker engine runs; on Windows start Docker Desktop if needed."""
+    if docker_ready():
+        return True
+    if os.name == "nt" and DOCKER_DESKTOP.is_file():
+        print("Starting Docker Desktop", end="", flush=True)
+        subprocess.Popen([str(DOCKER_DESKTOP)])
+        deadline = time.time() + 180
+        while time.time() < deadline:
+            time.sleep(5)
+            if docker_ready():
+                print(" -> engine running.")
+                return True
+            print(".", end="", flush=True)
+        print()
+    print("ERROR: Docker is not running. Open Docker Desktop and wait for 'Engine running'.")
+    return False
+
+
+# ------------------------------------------------------------------ start server
 def cmd_start() -> int:
     running = find_server()
     if running:
         print(f"OK: a FHIR server is already running on port {running}.")
         return 0
+    if not ensure_docker():
+        return 1
     port = 8080 if not port_in_use(8080) else 8090
     if port == 8090:
         print("Port 8080 is used by another program -> starting HAPI on port 8090.")
@@ -92,7 +124,7 @@ def cmd_start() -> int:
     deadline = time.time() + 240
     while time.time() < deadline:
         if fhir_ready(port):
-            print(f"\nOK: FHIR server ready at http://localhost:{port}/fhir  ->  now run button 2.")
+            print(f"\nOK: FHIR server ready at http://localhost:{port}/fhir")
             return 0
         print(".", end="", flush=True)
         time.sleep(5)
@@ -100,11 +132,11 @@ def cmd_start() -> int:
     return 1
 
 
-# ------------------------------------------------------------------ button 2
+# ------------------------------------------------------------------ live test
 def cmd_run() -> int:
     port = find_server()
     if port is None:
-        print("ERROR: no FHIR server found on ports 8080/8090/8081. Run button 1 first.")
+        print("ERROR: no FHIR server found on ports 8080/8090/8081. Start one first (action 'start').")
         return 1
     base = f"http://localhost:{port}/fhir"
     print(f"FHIR server: {base}")
@@ -167,7 +199,7 @@ def cmd_run() -> int:
 def cmd_record(name: str | None, port: int | None) -> int:
     port = port or find_server()
     if port is None or not fhir_ready(port):
-        print("ERROR: no FHIR server found. Run button 1 (or start the mock server) first.")
+        print("ERROR: no FHIR server found. Start one first (action 'start', or the mock server).")
         return 1
     server = "mock" if port == 8081 else "hapi"
     name = name or f"fhir_{server}_{time.strftime('%Y%m%d_%H%M%S')}"
@@ -195,20 +227,29 @@ def cmd_record(name: str | None, port: int | None) -> int:
     return 0 if rep["all_ok"] else 1
 
 
+def cmd_all() -> int:
+    """1 click: make sure a FHIR server runs, then do the live test."""
+    rc = cmd_start()
+    if rc != 0:
+        return rc
+    print()
+    return cmd_run()
+
+
 def cmd_stop() -> int:
     r = subprocess.run(["docker", "compose", "down"], cwd=ROOT)
     return r.returncode
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="Two-button live test of the FHIR dissector")
-    ap.add_argument("action", choices=["start", "run", "record", "stop"])
+    ap = argparse.ArgumentParser(description="One-click live test of the FHIR dissector")
+    ap.add_argument("action", choices=["all", "start", "run", "record", "stop"])
     ap.add_argument("--name", help="record: file name without extension (default: fhir_<server>_<time>)")
     ap.add_argument("--port", type=int, help="record: server port (default: found automatically)")
     args = ap.parse_args(argv)
     if args.action == "record":
         return cmd_record(args.name, args.port)
-    return {"start": cmd_start, "run": cmd_run, "stop": cmd_stop}[args.action]()
+    return {"all": cmd_all, "start": cmd_start, "run": cmd_run, "stop": cmd_stop}[args.action]()
 
 
 if __name__ == "__main__":

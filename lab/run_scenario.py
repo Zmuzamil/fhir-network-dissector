@@ -2,7 +2,9 @@
 
 Usage (Windows: terminal "as Administrator" if Npcap is admin-only)::
 
-    python lab/run_scenario.py --base http://localhost:8080/fhir --port 8080 --out captures/lab.pcap
+    python lab/run_scenario.py --base http://localhost:8080/fhir --port 8080 --out captures/pcaps/my_capture.pcap
+
+The usual way is `python lab/live_demo.py record` (picks the server, names the file, scores it).
 
 The default interface is scapy's loopback interface (``conf.loopback_name``).
 """
@@ -54,8 +56,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--base", default="http://localhost:8080/fhir", help="FHIR base URL")
     ap.add_argument("--iface", default=None, help="capture interface (default: loopback)")
     ap.add_argument("--port", type=int, default=None, help="TCP port to capture (default: from --base)")
-    ap.add_argument("--out", default="captures/lab.pcap", help="output PCAP")
-    ap.add_argument("--expected", default="captures/expected.json", help="output expected.json")
+    ap.add_argument("--out", default="captures/pcaps/fhir_capture.pcap", help="output PCAP")
+    ap.add_argument("--expected", default="captures/pcaps/fhir_capture_expected.json", help="output answer key")
     args = ap.parse_args(argv)
 
     port = args.port or urlsplit(args.base).port or 80

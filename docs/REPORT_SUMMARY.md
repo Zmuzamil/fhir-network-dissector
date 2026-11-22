@@ -25,7 +25,7 @@ Live capture and recorded captures share the same code path. For live use the to
 | Run | Calls | TP | FP | FN | TN | Precision | Recall | Interaction accuracy |
 |---|---|---|---|---|---|---|---|---|
 | Live capture (HAPI, 312 packets) | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% |
-| Recorded capture (HAPI, 268 packets) | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% |
+| Recorded capture (HAPI, `fhir_hapi.pcap`, 238 packets) | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% |
 | Built-in mock server | 19 | 17 | 0 | 0 | 2 | 100% | 100% | 100% |
 
 Resource-type accuracy was also 100%, and live events matched the events from the recorded capture. Robustness and cost: 100,000 random TCP segments caused no failure; a raw-frame decoder processes about 26,500 packets/s on one CPU core (8 times faster than generic scapy decoding, with identical output); memory stays bounded under load. The default output contained none of the synthetic patient data (names, birth dates, telephone numbers, search values, server diagnostics). The real HAPI traffic was IPv6 loopback with gzip-compressed, chunked responses.

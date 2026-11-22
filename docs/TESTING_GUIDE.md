@@ -9,16 +9,18 @@ All commands are for **PowerShell** in VS Code (*Terminal → New Terminal*).
 
 ---
 
-## Quick way — 2 buttons
+## Quick way — 1 click
 
-Open Docker Desktop (wait for *"Engine running"*), then in VS Code:
+In VS Code press **Ctrl+Shift+B** (= *Terminal → Run Task… → Run everything (1 click)*). Or in a terminal: `python lab/live_demo.py all`.
 
-| Button | How | What it does |
-|---|---|---|
-| **1 Start FHIR server** | *Terminal → Run Task… → 1 Start FHIR server* | Starts HAPI in Docker on port 8080 (or 8090 if 8080 is busy) and waits until it answers. Ends with `OK: FHIR server ready at http://localhost:8090/fhir`. Only needed once per session. |
-| **2 Run live test** | **Ctrl+Shift+B** (or *Run Task… → 2 Run live test*) | Starts the live dissector, sends the 19 calls, stops the dissector, prints its summary and the grade. Ends with `RESULT: PASS (everything matches)`. Run it as often as you like. |
+It does everything by itself:
+1. starts **Docker Desktop** if it is not running;
+2. starts the **HAPI FHIR server** on port 8080 (or 8090 if 8080 is busy) and waits until it answers — 1–2 minutes the first time, skipped if it already runs;
+3. runs the **live test**: starts the live dissector, sends the 19 calls, stops the dissector, prints its summary and the grade.
 
-Same from a terminal: `python lab/live_demo.py start` and `python lab/live_demo.py run`. Stop the server with *Run Task… → Stop FHIR server* (or `python lab/live_demo.py stop`).
+**You should see at the end:** `RESULT: PASS (everything matches)`. Press Ctrl+Shift+B again any time to repeat the test (a few seconds once the server runs).
+
+Stop the server when you are done: *Run Task… → Stop FHIR server* (or `python lab/live_demo.py stop`).
 
 **What one run produces (no PCAP files — live mode reads the network directly):**
 
@@ -30,7 +32,7 @@ Same from a terminal: `python lab/live_demo.py start` and `python lab/live_demo.
 
 Each run replaces these files with the new run's results.
 
-**Need PCAP files (recorded traffic, e.g. for Wireshark)?** *Run Task… → 3 Record PCAP* (or `python lab/live_demo.py record`). It records the same 19 calls into `captures/pcaps/fhir_<server>_<date>_<time>.pcap`, with its answer key (`_expected.json`) and the dissector's score (`_evaluation.txt`). A ready-made set is already there: `captures/pcaps/fhir_hapi.pcap` and `fhir_mock.pcap` (see `captures/pcaps/README.md`).
+**Need PCAP files (recorded traffic, e.g. for Wireshark)?** *Run Task… → Record PCAP* (or `python lab/live_demo.py record`). It records the same 19 calls into `captures/pcaps/fhir_<server>_<date>_<time>.pcap`, with its answer key (`_expected.json`) and the dissector's score (`_evaluation.txt`). A ready-made set is already there: `captures/pcaps/fhir_hapi.pcap` and `fhir_mock.pcap` (see `captures/pcaps/README.md`).
 
 The steps below do the same thing by hand, one command at a time, with explanations.
 
@@ -197,8 +199,8 @@ Then do Steps 4–7 with **8081** instead of 8080. You should get the same `RESU
 
 ## VS Code buttons
 
-- *Terminal → Run Task…* → `1 Start FHIR server`, `2 Run live test` (also **Ctrl+Shift+B**), `3 Record PCAP`, `Stop FHIR server`.
-- *Run and Debug* (Ctrl+Shift+D) → **Live capture (needs admin)**, **Generate traffic**, **Mock FHIR server** → press F5. Put a breakpoint in `fhir_dissector/classifier.py` → `classify()` to watch each live request being classified.
+- *Terminal → Run Task…* → `Run everything (1 click)` (also **Ctrl+Shift+B**), `Live test only`, `Record PCAP`, `Start FHIR server`, `Stop FHIR server`.
+- *Run and Debug* (Ctrl+Shift+D) → **Live test (1 click, debuggable)**, **Dissect recorded PCAP**, **Evaluate recorded PCAP**, **Mock FHIR server** → press F5. Put a breakpoint in `fhir_dissector/classifier.py` → `classify()` to watch each live request being classified.
 
 ---
 

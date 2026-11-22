@@ -2,7 +2,7 @@
 
 Usage::
 
-    python lab/gen_traffic.py --base http://localhost:8080/fhir --out captures/expected.json
+    python lab/gen_traffic.py --base http://localhost:8080/fhir --out captures/live_expected.json
 
 All FHIR calls share one keep-alive ``requests.Session``; the non-FHIR calls use a
 separate plain session (so they travel on a different TCP connection). Redirects are
@@ -209,7 +209,7 @@ def run(base: str, out: str | Path | None) -> list[dict[str, Any]]:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Generate lab FHIR traffic and expected.json")
     ap.add_argument("--base", default="http://localhost:8080/fhir", help="FHIR base URL")
-    ap.add_argument("--out", default="captures/expected.json", help="expected.json path")
+    ap.add_argument("--out", default="captures/live_expected.json", help="answer key (JSON) path")
     args = ap.parse_args(argv)
     run(args.base, args.out)
     return 0
