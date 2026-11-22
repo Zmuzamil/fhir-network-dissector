@@ -53,6 +53,14 @@ python lab/run_scenario.py --base http://localhost:8081/fhir --port 8081 --out c
 
 ## 2. Usage
 
+### Quickest: live test in 2 buttons
+
+```powershell
+python lab/live_demo.py start    # 1: start HAPI (8080, or 8090 if busy) and wait until ready
+python lab/live_demo.py run      # 2: live dissector + 19 calls + grade -> RESULT: PASS
+```
+In VS Code: *Run Task → 1 Start FHIR server*, then **Ctrl+Shift+B**. Results: `captures/live_events.jsonl` (one line per request/response), grade in `captures/evaluation_live.txt`.
+
 ### Offline (PCAP / PCAPNG)
 
 ```powershell
@@ -83,7 +91,7 @@ Each event is printed as one JSON line when the response completes. Press **Ctrl
 
 ### VS Code
 
-- **Tasks** (*Terminal → Run Task*): `Start HAPI`, `Stop HAPI`, `Run scenario`, `Dissect lab PCAP`, `Evaluate`.
+- **Tasks** (*Terminal → Run Task*): `1 Start FHIR server`, `2 Run live test` (default build task: **Ctrl+Shift+B**), `Stop FHIR server`. They call `lab/live_demo.py start | run | stop`.
 - **Debug configurations** (*Run and Debug*): *Dissect lab PCAP*, *Live capture (needs admin)*, *Mock FHIR server*, *Generate traffic*, *Evaluate*.
 
 ### As a library (integration point)

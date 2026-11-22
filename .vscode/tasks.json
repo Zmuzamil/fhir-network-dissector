@@ -2,68 +2,34 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Start HAPI",
-      "type": "shell",
-      "command": "docker compose up -d",
-      "problemMatcher": []
-    },
-    {
-      "label": "Stop HAPI",
-      "type": "shell",
-      "command": "docker compose down",
-      "problemMatcher": []
-    },
-    {
-      "label": "Run scenario",
+      "label": "1 Start FHIR server",
+      "detail": "Starts HAPI in Docker (port 8080, or 8090 if busy) and waits until it is ready",
       "type": "process",
       "command": "${workspaceFolder}/.venv/Scripts/python.exe",
-      "args": [
-        "lab/run_scenario.py",
-        "--base",
-        "http://localhost:8080/fhir",
-        "--port",
-        "8080",
-        "--out",
-        "captures/lab.pcap",
-        "--expected",
-        "captures/expected.json"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
+      "args": ["lab/live_demo.py", "start"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
       "problemMatcher": []
     },
     {
-      "label": "Dissect lab PCAP",
+      "label": "2 Run live test",
+      "detail": "Live dissector + 19 FHIR calls + grade (shortcut: Ctrl+Shift+B)",
       "type": "process",
       "command": "${workspaceFolder}/.venv/Scripts/python.exe",
-      "args": [
-        "-m",
-        "fhir_dissector",
-        "pcap",
-        "captures/lab.pcap",
-        "-o",
-        "captures/events.jsonl"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
+      "args": ["lab/live_demo.py", "run"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
       "problemMatcher": []
     },
     {
-      "label": "Evaluate",
+      "label": "Stop FHIR server",
+      "detail": "Stops the HAPI container",
       "type": "process",
       "command": "${workspaceFolder}/.venv/Scripts/python.exe",
-      "args": [
-        "lab/evaluate.py",
-        "--pcap",
-        "captures/lab.pcap",
-        "--expected",
-        "captures/expected.json"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
+      "args": ["lab/live_demo.py", "stop"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
       "problemMatcher": []
     }
   ]

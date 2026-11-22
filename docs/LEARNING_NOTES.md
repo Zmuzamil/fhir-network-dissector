@@ -258,3 +258,18 @@ python lab/mock_fhir_server.py --port 8081               # small FHIR server wit
 **How correctness is shown now:** the lab evaluator on live traffic (`gen_traffic.py` → `live` → `evaluate.py --events`): 19/19 calls, precision, recall and interaction accuracy 100%, RESULT: PASS. The same evaluator also works on a recorded capture (`--pcap`).
 
 **If the tests are ever needed again:** they are kept in git history (commit `fca5799`): `git checkout fca5799 -- tests`.
+
+---
+
+## Two-button live test
+
+**Question asked:** "Does it give multiple PCAPs?" **Answer:** no. Live mode reads the network directly and writes no PCAP. The "multiple results" are lines in one file: one JSON line per request/response (19 per test run) in `captures/live_events.jsonl`. Only the optional recording (`run_scenario.py`) writes one PCAP, replaced on every recording.
+
+**What we built:** `lab/live_demo.py` with three actions, wired to VS Code tasks:
+- `start` (*1 Start FHIR server*): checks if a FHIR server is already running; otherwise starts HAPI with Docker on 8080, or on 8090 if 8080 is busy, and waits until `/fhir/metadata` answers.
+- `run` (*2 Run live test*, **Ctrl+Shift+B**): finds the server (8080/8090/8081), starts the live dissector in the background, sends the 19 calls, stops the dissector cleanly, prints its summary and the grade, saves `captures/evaluation_live.txt`.
+- `stop` (*Stop FHIR server*): `docker compose down`.
+
+**Problem hit (a real bug, now fixed):** stopping the live dissector from the script took 20 s and its summary was lost. Meaning: when no packets arrive, scapy's capture loop waits inside a native `select` call, and Python only runs signal handlers (Ctrl+C, SIGTERM, Ctrl+Break) after that call returns. So a stop request waited until the next packet — Ctrl+C on a quiet network would be slow too. Fix in `cli.py`: the capture runs in a background thread (scapy `AsyncSniffer`); the main thread only waits in short steps, reacts to Ctrl+C / SIGTERM / SIGBREAK at once, and stops the capture thread. `--timeout` is now checked by the main thread. Result: stop in 0.3 s with the summary printed.
+
+**Result:** button 1 picked port 8090 by itself (Apache on 8080); button 2 → 354 packets, 19/19 calls, precision/recall/interaction accuracy 100%, RESULT: PASS.

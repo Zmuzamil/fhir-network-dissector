@@ -9,6 +9,31 @@ All commands are for **PowerShell** in VS Code (*Terminal → New Terminal*).
 
 ---
 
+## Quick way — 2 buttons
+
+Open Docker Desktop (wait for *"Engine running"*), then in VS Code:
+
+| Button | How | What it does |
+|---|---|---|
+| **1 Start FHIR server** | *Terminal → Run Task… → 1 Start FHIR server* | Starts HAPI in Docker on port 8080 (or 8090 if 8080 is busy) and waits until it answers. Ends with `OK: FHIR server ready at http://localhost:8090/fhir`. Only needed once per session. |
+| **2 Run live test** | **Ctrl+Shift+B** (or *Run Task… → 2 Run live test*) | Starts the live dissector, sends the 19 calls, stops the dissector, prints its summary and the grade. Ends with `RESULT: PASS (everything matches)`. Run it as often as you like. |
+
+Same from a terminal: `python lab/live_demo.py start` and `python lab/live_demo.py run`. Stop the server with *Run Task… → Stop FHIR server* (or `python lab/live_demo.py stop`).
+
+**What one run produces (no PCAP files — live mode reads the network directly):**
+
+| File | Content |
+|---|---|
+| `captures/live_events.jsonl` | the results: **one line per request/response** (19 lines) |
+| `captures/live_expected.json` | the answer key written by the traffic generator |
+| `captures/evaluation_live.txt` | the grade (precision, recall, interaction accuracy) |
+
+Each run replaces these files with the new run's results.
+
+The steps below do the same thing by hand, one command at a time, with explanations.
+
+---
+
 ## Step 1 — Open the project
 
 ```powershell
@@ -170,7 +195,7 @@ Then do Steps 4–7 with **8081** instead of 8080. You should get the same `RESU
 
 ## VS Code buttons
 
-- *Terminal → Run Task…* → `Start HAPI`, `Stop HAPI`.
+- *Terminal → Run Task…* → `1 Start FHIR server`, `2 Run live test` (also **Ctrl+Shift+B**), `Stop FHIR server`.
 - *Run and Debug* (Ctrl+Shift+D) → **Live capture (needs admin)**, **Generate traffic**, **Mock FHIR server** → press F5. Put a breakpoint in `fhir_dissector/classifier.py` → `classify()` to watch each live request being classified.
 
 ---

@@ -156,7 +156,7 @@ def cmd_live(args: argparse.Namespace) -> int:
     """Live mode: sniff, emit each event as one line, flush on Ctrl+C / SIGTERM / timeout."""
     prepare_scapy_capture()
     from scapy.config import conf
-    from scapy.sendrecv import sniff
+    from scapy.sendrecv import AsyncSniffer
 
     iface = args.iface or conf.loopback_name
     d = _make_dissector(args)
@@ -199,18 +199,35 @@ def cmd_live(args: argparse.Namespace) -> int:
             last_expire[0] = now
             emit(d.expire_idle(float(pkt.time)))
 
-    def on_sigterm(signum: int, frame: Any) -> None:  # service managers send SIGTERM
-        raise KeyboardInterrupt
+    def on_stop_signal(signum: int, frame: Any) -> None:
+        raise KeyboardInterrupt  # stop sniffing, then flush and print the summary
 
-    if hasattr(signal, "SIGTERM"):
-        signal.signal(signal.SIGTERM, on_sigterm)
+    # SIGTERM: sent by service managers (systemctl stop). SIGBREAK: Ctrl+Break on Windows,
+    # also used by lab/live_demo.py to stop this process cleanly.
+    for name in ("SIGTERM", "SIGBREAK"):
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), on_stop_signal)
     print(f"Live capture on {iface!r} filter={args.bpf!r} ({'fast' if fast else 'scapy'} decoding; "
           f"Ctrl+C to stop)", file=sys.stderr, flush=True)
+    # Capture runs in a background thread; the main thread only waits. That way Ctrl+C and
+    # stop signals are handled at once, even when no packets arrive (a blocking capture
+    # call would delay them until the next packet).
+    sniffer = AsyncSniffer(opened_socket=sock, store=False, prn=on_packet)
+    sniffer.start()
+    deadline = time.monotonic() + args.timeout if args.timeout else None
     try:
-        sniff(opened_socket=sock, store=False, prn=on_packet, timeout=args.timeout)
+        while sniffer.thread is not None and sniffer.thread.is_alive():
+            if deadline is not None and time.monotonic() >= deadline:
+                break  # --timeout reached
+            sniffer.thread.join(0.2)
     except KeyboardInterrupt:
         pass
     finally:
+        if sniffer.running:
+            try:
+                sniffer.stop()
+            except Exception:  # already stopping
+                pass
         emit(d.flush())
         sock.close()
         if out_file:
