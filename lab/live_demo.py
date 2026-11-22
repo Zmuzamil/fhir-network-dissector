@@ -4,6 +4,7 @@ Usage::
 
     python lab/live_demo.py start     # button 1: start HAPI (port 8080, or 8090 if 8080 is busy)
     python lab/live_demo.py run       # button 2: live dissector + 19 calls + grade
+    python lab/live_demo.py record    # record the 19 calls into a PCAP file (+ answer key + score)
     python lab/live_demo.py stop      # stop HAPI
 
 ``run`` finds the FHIR server by itself (HAPI on 8080/8090, or the mock server on 8081),
@@ -13,6 +14,9 @@ stops the dissector cleanly, and prints the evaluation. Results:
 * captures/live_events.jsonl   - one line per request/response (what the dissector saw)
 * captures/live_expected.json  - the answer key written by the traffic generator
 * captures/evaluation_live.txt - the grade (precision, recall, interaction accuracy)
+
+``record`` saves the traffic itself, for Wireshark or later analysis, in captures/pcaps/:
+<name>.pcap, <name>_expected.json (answer key) and <name>_evaluation.txt (dissector score).
 """
 from __future__ import annotations
 
@@ -41,6 +45,7 @@ CAPTURES = ROOT / "captures"
 EVENTS = CAPTURES / "live_events.jsonl"
 EXPECTED = CAPTURES / "live_expected.json"
 REPORT = CAPTURES / "evaluation_live.txt"
+PCAPS = CAPTURES / "pcaps"
 CANDIDATE_PORTS = (8080, 8090, 8081)  # HAPI default, HAPI alternative, mock server
 
 
@@ -158,6 +163,38 @@ def cmd_run() -> int:
     return 0 if rep["all_ok"] else 1
 
 
+# ------------------------------------------------------------------ record
+def cmd_record(name: str | None, port: int | None) -> int:
+    port = port or find_server()
+    if port is None or not fhir_ready(port):
+        print("ERROR: no FHIR server found. Run button 1 (or start the mock server) first.")
+        return 1
+    server = "mock" if port == 8081 else "hapi"
+    name = name or f"fhir_{server}_{time.strftime('%Y%m%d_%H%M%S')}"
+    PCAPS.mkdir(parents=True, exist_ok=True)
+    pcap, expected = PCAPS / f"{name}.pcap", PCAPS / f"{name}_expected.json"
+    report = PCAPS / f"{name}_evaluation.txt"
+    print(f"Recording the 19 calls against http://localhost:{port}/fhir ...")
+    r = subprocess.run([sys.executable, "lab/run_scenario.py", "--base", f"http://localhost:{port}/fhir",
+                        "--port", str(port), "--out", str(pcap), "--expected", str(expected)],
+                       cwd=ROOT, capture_output=True, text=True)
+    if r.returncode != 0:
+        print("ERROR while recording:\n" + (r.stdout + r.stderr)[-1500:])
+        return 1
+    print(r.stdout.strip().splitlines()[-1])  # "Captured N packets -> ..."
+    from fhir_dissector import FhirDissector
+    from fhir_dissector.cli import dissect_pcap
+
+    rep = evaluate.evaluate(dissect_pcap(pcap, FhirDissector(emit_non_fhir=True)),
+                            json.loads(expected.read_text(encoding="utf-8")))
+    buf = io.StringIO()
+    evaluate.print_report(rep, buf)
+    report.write_text(buf.getvalue(), encoding="utf-8")
+    print("\n".join(buf.getvalue().strip().splitlines()[-4:]))
+    print(f"Saved: {pcap.relative_to(ROOT)}, {expected.name}, {report.name}  (open the .pcap in Wireshark)")
+    return 0 if rep["all_ok"] else 1
+
+
 def cmd_stop() -> int:
     r = subprocess.run(["docker", "compose", "down"], cwd=ROOT)
     return r.returncode
@@ -165,8 +202,12 @@ def cmd_stop() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Two-button live test of the FHIR dissector")
-    ap.add_argument("action", choices=["start", "run", "stop"])
+    ap.add_argument("action", choices=["start", "run", "record", "stop"])
+    ap.add_argument("--name", help="record: file name without extension (default: fhir_<server>_<time>)")
+    ap.add_argument("--port", type=int, help="record: server port (default: found automatically)")
     args = ap.parse_args(argv)
+    if args.action == "record":
+        return cmd_record(args.name, args.port)
     return {"start": cmd_start, "run": cmd_run, "stop": cmd_stop}[args.action]()
 
 

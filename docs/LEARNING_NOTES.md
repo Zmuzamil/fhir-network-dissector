@@ -273,3 +273,17 @@ python lab/mock_fhir_server.py --port 8081               # small FHIR server wit
 **Problem hit (a real bug, now fixed):** stopping the live dissector from the script took 20 s and its summary was lost. Meaning: when no packets arrive, scapy's capture loop waits inside a native `select` call, and Python only runs signal handlers (Ctrl+C, SIGTERM, Ctrl+Break) after that call returns. So a stop request waited until the next packet — Ctrl+C on a quiet network would be slow too. Fix in `cli.py`: the capture runs in a background thread (scapy `AsyncSniffer`); the main thread only waits in short steps, reacts to Ctrl+C / SIGTERM / SIGBREAK at once, and stops the capture thread. `--timeout` is now checked by the main thread. Result: stop in 0.3 s with the summary printed.
 
 **Result:** button 1 picked port 8090 by itself (Apache on 8080); button 2 → 354 packets, 19/19 calls, precision/recall/interaction accuracy 100%, RESULT: PASS.
+
+---
+
+## PCAP set for the supervisor
+
+**Question:** the professor asked "do you have PCAPs?". A PCAP is a recording of network traffic (open it in Wireshark). It serves as evidence of what was tested, makes results reproducible, and is the start of a dataset.
+
+**What we made:** `captures/pcaps/` with `fhir_hapi.pcap` (238 packets, HAPI FHIR R4) and `fhir_mock.pcap` (142 packets, mock server), each with `_expected.json` (ground truth) and `_evaluation.txt` (dissector score: 100% precision, recall, interaction accuracy), plus a README written for the professor. Checked with Wireshark's own tools: `capinfos` reads both files, `tshark` sees 19 HTTP requests in each. These PCAPs are now tracked by git (`!captures/pcaps/*.pcap` in `.gitignore`); `captures/fhir_pcaps.zip` (≈260 KB) is for e-mail.
+
+**New button:** `python lab/live_demo.py record` / task *3 Record PCAP* records a new capture with its ground truth and score.
+
+**Tip:** Wireshark only decodes HTTP on its usual ports. For 8090/8081 use *Analyze → Decode As… → TCP port → HTTP*.
+
+**Privacy:** the PCAPs contain full message contents (only synthetic patients). Redaction applies to the dissector's events, not to raw captures — never share PCAPs of real patient traffic.

@@ -30,6 +30,8 @@ Same from a terminal: `python lab/live_demo.py start` and `python lab/live_demo.
 
 Each run replaces these files with the new run's results.
 
+**Need PCAP files (recorded traffic, e.g. for Wireshark)?** *Run Task… → 3 Record PCAP* (or `python lab/live_demo.py record`). It records the same 19 calls into `captures/pcaps/fhir_<server>_<date>_<time>.pcap`, with its answer key (`_expected.json`) and the dissector's score (`_evaluation.txt`). A ready-made set is already there: `captures/pcaps/fhir_hapi.pcap` and `fhir_mock.pcap` (see `captures/pcaps/README.md`).
+
 The steps below do the same thing by hand, one command at a time, with explanations.
 
 ---
@@ -195,7 +197,7 @@ Then do Steps 4–7 with **8081** instead of 8080. You should get the same `RESU
 
 ## VS Code buttons
 
-- *Terminal → Run Task…* → `1 Start FHIR server`, `2 Run live test` (also **Ctrl+Shift+B**), `Stop FHIR server`.
+- *Terminal → Run Task…* → `1 Start FHIR server`, `2 Run live test` (also **Ctrl+Shift+B**), `3 Record PCAP`, `Stop FHIR server`.
 - *Run and Debug* (Ctrl+Shift+D) → **Live capture (needs admin)**, **Generate traffic**, **Mock FHIR server** → press F5. Put a breakpoint in `fhir_dissector/classifier.py` → `classify()` to watch each live request being classified.
 
 ---

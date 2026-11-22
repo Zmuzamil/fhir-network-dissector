@@ -61,6 +61,8 @@ python lab/live_demo.py run      # 2: live dissector + 19 calls + grade -> RESUL
 ```
 In VS Code: *Run Task → 1 Start FHIR server*, then **Ctrl+Shift+B**. Results: `captures/live_events.jsonl` (one line per request/response), grade in `captures/evaluation_live.txt`.
 
+**PCAP files:** `python lab/live_demo.py record` (task *3 Record PCAP*) records the traffic into `captures/pcaps/`. A ready-made, documented set is in [captures/pcaps/](captures/pcaps/README.md): `fhir_hapi.pcap` (HAPI FHIR R4) and `fhir_mock.pcap`, each with ground truth and score (both 100%).
+
 ### Offline (PCAP / PCAPNG)
 
 ```powershell
@@ -91,7 +93,7 @@ Each event is printed as one JSON line when the response completes. Press **Ctrl
 
 ### VS Code
 
-- **Tasks** (*Terminal → Run Task*): `1 Start FHIR server`, `2 Run live test` (default build task: **Ctrl+Shift+B**), `Stop FHIR server`. They call `lab/live_demo.py start | run | stop`.
+- **Tasks** (*Terminal → Run Task*): `1 Start FHIR server`, `2 Run live test` (default build task: **Ctrl+Shift+B**), `3 Record PCAP`, `Stop FHIR server`. They call `lab/live_demo.py start | run | record | stop`.
 - **Debug configurations** (*Run and Debug*): *Dissect lab PCAP*, *Live capture (needs admin)*, *Mock FHIR server*, *Generate traffic*, *Evaluate*.
 
 ### As a library (integration point)

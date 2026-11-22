@@ -4,3 +4,5 @@ __pycache__/
 captures/*.pcap
 captures/*.pcapng
 captures/*.jsonl
+!captures/pcaps/*.pcap
+captures/*.zip

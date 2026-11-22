@@ -1,0 +1,173 @@
+[
+  {
+    "index": 1,
+    "method": "GET",
+    "path": "/fhir/metadata",
+    "expected_interaction": "capabilities",
+    "expected_resource_type": null,
+    "is_fhir": true,
+    "actual_status": 200
+  },
+  {
+    "index": 2,
+    "method": "POST",
+    "path": "/fhir/Patient",
+    "expected_interaction": "create",
+    "expected_resource_type": "Patient",
+    "is_fhir": true,
+    "actual_status": 201
+  },
+  {
+    "index": 3,
+    "method": "POST",
+    "path": "/fhir/Patient",
+    "expected_interaction": "create",
+    "expected_resource_type": "Patient",
+    "is_fhir": true,
+    "actual_status": 201
+  },
+  {
+    "index": 4,
+    "method": "GET",
+    "path": "/fhir/Patient/1005",
+    "expected_interaction": "read",
+    "expected_resource_type": "Patient",
+    "is_fhir": true,
+    "actual_status": 200
+  },
+  {
+    "index": 5,
+    "method": "GET",
+    "path": "/fhir/Patient/1005",
+    "expected_interaction": "read",
+    "expected_resource_type": "Patient",
+    "is_fhir": true,
+    "actual_status": 200
+  },
+  {
+    "index": 6,
+    "method": "PUT",
+    "path": "/fhir/Patient/1005",
+    "expected_interaction": "update",
+    "expected_resource_type": "Patient",
+    "is_fhir": true,
+    "actual_status": 200
+  },
+  {
+    "index": 7,
+    "method": "GET",
+    "path": "/fhir/Patient/1005/_history",
+    "expected_interaction": "history-instance",
+    "expected_resource_type": "Patient",
+    "is_fhir": true,
+    "actual_status": 200
+  },
+  {
+    "index": 8,
+    "method": "GET",
+    "path": "/fhir/Patient/1005/_history/1",
+    "expected_interaction": "vread",
+    "expected_resource_type": "Patient",
+    "is_fhir": true,
+    "actual_status": 200
+  },
+  {
+    "index": 9,
+    "method": "GET",
+    "path": "/fhir/Patient?family=Rossi&_count=5",
+    "expected_interaction": "search-type",
+    "expected_resource_type": "Patient",
+    "is_fhir": true,
+    "actual_status": 200
+  },
+  {
+    "index": 10,
+    "method": "POST",
+    "path": "/fhir/Patient/_search",
+    "expected_interaction": "search-type",
+    "expected_resource_type": "Patient",
+    "is_fhir": true,
+    "actual_status": 200
+  },
+  {
+    "index": 11,
+    "method": "POST",
+    "path": "/fhir/Observation",
+    "expected_interaction": "create",
+    "expected_resource_type": "Observation",
+    "is_fhir": true,
+    "actual_status": 201
+  },
+  {
+    "index": 12,
+    "method": "POST",
+    "path": "/fhir",
+    "expected_interaction": "transaction",
+    "expected_resource_type": null,
+    "is_fhir": true,
+    "actual_status": 200
+  },
+  {
+    "index": 13,
+    "method": "POST",
+    "path": "/fhir",
+    "expected_interaction": "batch",
+    "expected_resource_type": null,
+    "is_fhir": true,
+    "actual_status": 200
+  },
+  {
+    "index": 14,
+    "method": "GET",
+    "path": "/fhir/Patient/1005/$everything",
+    "expected_interaction": "operation",
+    "expected_resource_type": "Patient",
+    "is_fhir": true,
+    "actual_status": 200
+  },
+  {
+    "index": 15,
+    "method": "DELETE",
+    "path": "/fhir/Observation/1007",
+    "expected_interaction": "delete",
+    "expected_resource_type": "Observation",
+    "is_fhir": true,
+    "actual_status": 200
+  },
+  {
+    "index": 16,
+    "method": "GET",
+    "path": "/fhir/Observation/1007",
+    "expected_interaction": "read",
+    "expected_resource_type": "Observation",
+    "is_fhir": true,
+    "actual_status": 410
+  },
+  {
+    "index": 17,
+    "method": "GET",
+    "path": "/fhir/Patient/does-not-exist-999",
+    "expected_interaction": "read",
+    "expected_resource_type": "Patient",
+    "is_fhir": true,
+    "actual_status": 404
+  },
+  {
+    "index": 18,
+    "method": "GET",
+    "path": "/",
+    "expected_interaction": null,
+    "expected_resource_type": null,
+    "is_fhir": false,
+    "actual_status": 200
+  },
+  {
+    "index": 19,
+    "method": "GET",
+    "path": "/favicon.ico",
+    "expected_interaction": null,
+    "expected_resource_type": null,
+    "is_fhir": false,
+    "actual_status": 404
+  }
+]
