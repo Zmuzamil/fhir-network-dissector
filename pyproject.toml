@@ -11,10 +11,14 @@ requires-python = ">=3.10"
 dependencies = ["scapy>=2.5"]
 
 [project.optional-dependencies]
-lab = ["requests>=2.31"]
+lab = ["requests>=2.31", "pytest>=7.4"]
 
 [project.scripts]
 fhir-dissector = "fhir_dissector.cli:main"
 
 [tool.setuptools]
 packages = ["fhir_dissector"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

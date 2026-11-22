@@ -2,3 +2,5 @@
 scapy>=2.5
 # Lab: traffic generator
 requests>=2.31
+# Tests (unit tests, no Docker/network/admin needed)
+pytest>=7.4
