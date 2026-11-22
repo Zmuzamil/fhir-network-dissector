@@ -1,0 +1,10 @@
+=== icu ===
+capture: 5464 frames, 60.5 s, 1.1 MB, max frame 1514 bytes (0 frames > 1514), 5 TCP connections
+segments: 9 of 650 HTTP messages span several TCP segments; median 5, max 106 segments per message
+systems: 3 nodes with traffic (ehr, monitor-1, monitor-2)
+answer key: 325 calls = 325 plaintext + 0 encrypted (TLS, expected not visible; events seen from those clients: 0)
+dissector: 325 events, matched 325, extra 0 (FHIR 0); 3549.7 events/s, 59679.2 packets/s
+detection: TP=325 FP=0 FN=0 TN=0  precision=100.00%  recall=100.00%
+interaction accuracy=100.00%  resource type accuracy=100.00%
+message mix: create 304, read 7, batch 6, search-type 5, delete 2, transaction 1
+RESULT: PASS (everything matches)

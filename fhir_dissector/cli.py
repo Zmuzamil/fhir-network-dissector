@@ -2,8 +2,8 @@
 
 Examples::
 
-    python -m fhir_dissector pcap captures/pcaps/fhir_hapi.pcap -o captures/events.jsonl
-    python -m fhir_dissector pcap captures/pcaps/fhir_hapi.pcap --all --no-redact
+    python -m fhir_dissector pcap captures/netlab/general.pcap -o captures/events.jsonl
+    python -m fhir_dissector pcap captures/netlab/general.pcap --all --no-redact
     python -m fhir_dissector live --bpf "tcp port 8080" -o captures/live_events.jsonl --quiet
 
 Both modes end in the same code path (FhirDissector). Classic PCAP files and libpcap live
@@ -202,8 +202,8 @@ def cmd_live(args: argparse.Namespace) -> int:
     def on_stop_signal(signum: int, frame: Any) -> None:
         raise KeyboardInterrupt  # stop sniffing, then flush and print the summary
 
-    # SIGTERM: sent by service managers (systemctl stop). SIGBREAK: Ctrl+Break on Windows,
-    # also used by lab/live_demo.py to stop this process cleanly.
+    # SIGTERM: sent by service managers (systemctl stop) and docker stop. SIGBREAK: Ctrl+Break
+    # on Windows (how a script stops a console process cleanly there).
     for name in ("SIGTERM", "SIGBREAK"):
         if hasattr(signal, name):
             signal.signal(getattr(signal, name), on_stop_signal)

@@ -1,0 +1,10 @@
+=== general ===
+capture: 4756 frames, 65.5 s, 0.9 MB, max frame 1514 bytes (0 frames > 1514), 36 TCP connections
+segments: 23 of 410 HTTP messages span several TCP segments; median 7, max 106 segments per message
+systems: 6 nodes with traffic (browser, clinician, ehr, lis, monitor-1, secure-clinician)
+answer key: 234 calls = 205 plaintext + 29 encrypted (TLS, expected not visible; events seen from those clients: 0)
+dissector: 205 events, matched 205, extra 0 (FHIR 0); 3280.9 events/s, 76117.9 packets/s
+detection: TP=173 FP=0 FN=0 TN=32  precision=100.00%  recall=100.00%
+interaction accuracy=100.00%  resource type accuracy=100.00%
+message mix: create 116, non-FHIR 32, encrypted (TLS) 29, search-type 28, read 17, batch 3, delete 3, operation 3, transaction 1, search-compartment 1, update 1
+RESULT: PASS (everything matches)

@@ -2,51 +2,73 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Live test (1 click, debuggable)",
+      "name": "Network lab: run icu (60 s)",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/lab/live_demo.py",
-      "args": [
-        "all"
-      ],
       "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal"
+      "console": "integratedTerminal",
+      "program": "${workspaceFolder}/netlab/labctl.py",
+      "args": [
+        "run",
+        "icu",
+        "--duration",
+        "60"
+      ]
     },
     {
-      "name": "Dissect recorded PCAP",
+      "name": "Dissect a network-lab capture",
       "type": "debugpy",
       "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
       "module": "fhir_dissector",
       "args": [
         "pcap",
-        "captures/pcaps/fhir_hapi.pcap",
+        "captures/netlab/general.pcap",
+        "--all",
         "-o",
         "captures/events.jsonl"
-      ],
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal"
+      ]
     },
     {
-      "name": "Evaluate recorded PCAP",
+      "name": "Evaluate a network-lab capture",
       "type": "debugpy",
       "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
       "program": "${workspaceFolder}/lab/evaluate.py",
       "args": [
         "--pcap",
-        "captures/pcaps/fhir_hapi.pcap",
+        "captures/netlab/general.pcap",
         "--expected",
-        "captures/pcaps/fhir_hapi_expected.json"
-      ],
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal"
+        "captures/netlab/general_expected.jsonl"
+      ]
     },
     {
-      "name": "Mock FHIR server",
+      "name": "Show a node config",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/lab/mock_fhir_server.py",
       "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal"
+      "console": "integratedTerminal",
+      "program": "${workspaceFolder}/netlab/fhir_node.py",
+      "args": [
+        "--node",
+        "netlab/scenari/general/ehr.ini",
+        "--show"
+      ]
+    },
+    {
+      "name": "Debug current test file",
+      "type": "debugpy",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "module": "pytest",
+      "args": [
+        "${file}",
+        "-q"
+      ],
+      "justMyCode": false
     }
   ]
 }

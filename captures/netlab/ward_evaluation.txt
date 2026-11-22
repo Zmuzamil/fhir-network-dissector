@@ -1,0 +1,10 @@
+=== ward ===
+capture: 1117 frames, 63.5 s, 0.4 MB, max frame 1514 bytes (0 frames > 1514), 36 TCP connections
+segments: 19 of 274 HTTP messages span several TCP segments; median 7, max 7 segments per message
+systems: 4 nodes with traffic (browser, clinician, clinician-2, ehr)
+answer key: 137 calls = 137 plaintext + 0 encrypted (TLS, expected not visible; events seen from those clients: 0)
+dissector: 137 events, matched 137, extra 0 (FHIR 0); 4532.0 events/s, 36950.3 packets/s
+detection: TP=101 FP=0 FN=0 TN=36  precision=100.00%  recall=100.00%
+interaction accuracy=100.00%  resource type accuracy=100.00%
+message mix: search-type 42, non-FHIR 36, read 26, create 19, operation 5, search-compartment 4, delete 3, transaction 1, update 1
+RESULT: PASS (everything matches)

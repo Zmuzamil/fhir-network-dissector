@@ -2,8 +2,8 @@
 
 Usage::
 
-    python lab/evaluate.py --pcap captures/pcaps/fhir_hapi.pcap --expected captures/pcaps/fhir_hapi_expected.json
-    python lab/evaluate.py --events captures/live_events.jsonl --expected captures/live_expected.json
+    python lab/evaluate.py --pcap capture.pcap --expected expected.json          # single client, JSON list
+    python lab/evaluate.py --events events.jsonl --expected expected.json        # events from live mode
 
 With ``--pcap`` the dissector runs with ``emit_non_fhir=True``. With ``--events`` an existing
 JSONL file is evaluated (e.g. from live mode; produce it with ``--all`` for full results).

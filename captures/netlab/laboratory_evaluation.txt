@@ -1,0 +1,10 @@
+=== laboratory ===
+capture: 2703 frames, 60.5 s, 0.4 MB, max frame 834 bytes (0 frames > 1514), 58 TCP connections
+segments: 1 of 178 HTTP messages span several TCP segments; median 48, max 48 segments per message
+systems: 2 nodes with traffic (ehr, lis)
+answer key: 89 calls = 89 plaintext + 0 encrypted (TLS, expected not visible; events seen from those clients: 0)
+dissector: 89 events, matched 89, extra 0 (FHIR 0); 2952.5 events/s, 89670.8 packets/s
+detection: TP=89 FP=0 FN=0 TN=0  precision=100.00%  recall=100.00%
+interaction accuracy=100.00%  resource type accuracy=100.00%
+message mix: create 59, search-type 16, read 9, delete 3, batch 1, transaction 1
+RESULT: PASS (everything matches)

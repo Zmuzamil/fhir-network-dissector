@@ -5,15 +5,9 @@ __pycache__/
 captures/*.pcap
 captures/*.pcapng
 captures/*.jsonl
-captures/*.zip
-captures/live_expected.json
-captures/evaluation_live.txt
-# the documented PCAP set IS kept in git
-!captures/pcaps/*.pcap
 # third-party reference material (read only)
 reference/
 .pytest_cache/
-captures/netlab/try*/
 captures/netlab/run/
 netlab/compose.scenario.yml
 netlab/.run/

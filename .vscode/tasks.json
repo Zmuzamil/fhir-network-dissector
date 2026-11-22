@@ -2,8 +2,8 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Run everything (1 click)",
-      "detail": "Ctrl+Shift+B: starts Docker + HAPI if needed, then the live test with grade",
+      "label": "Network lab: all scenarios (5 min each)",
+      "detail": "Ctrl+Shift+B: build the hospital network, capture every scenario, evaluate (~25 min)",
       "type": "process",
       "command": "${workspaceFolder}/.venv/Scripts/python.exe",
       "options": {
@@ -16,17 +16,18 @@
       },
       "problemMatcher": [],
       "args": [
-        "lab/live_demo.py",
-        "all"
+        "netlab/labctl.py",
+        "generate",
+        "--duration",
+        "300"
       ],
       "group": {
-        "kind": "build",
-        "isDefault": true
+        "kind": "build"
       }
     },
     {
-      "label": "Live test only",
-      "detail": "Server must already run: live dissector + 19 calls + grade",
+      "label": "Network lab: quick run (60 s each)",
+      "detail": "Ctrl+Shift+B: same with 60 s per scenario (~10 min)",
       "type": "process",
       "command": "${workspaceFolder}/.venv/Scripts/python.exe",
       "options": {
@@ -39,13 +40,37 @@
       },
       "problemMatcher": [],
       "args": [
-        "lab/live_demo.py",
-        "run"
+        "netlab/labctl.py",
+        "generate",
+        "--duration",
+        "60"
+      ],
+      "group": {
+        "kind": "build"
+      }
+    },
+    {
+      "label": "Network lab: evaluate captures",
+      "detail": "Re-evaluate captures/netlab/*.pcap and write summary.txt",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "args": [
+        "netlab/labctl.py",
+        "evaluate"
       ]
     },
     {
-      "label": "Record PCAP",
-      "detail": "Records the 19 calls into captures/pcaps/ (pcap + answer key + score)",
+      "label": "Network lab: stop (down)",
+      "detail": "Stop containers and networks, merge answer keys (safe after an interrupted run)",
       "type": "process",
       "command": "${workspaceFolder}/.venv/Scripts/python.exe",
       "options": {
@@ -58,13 +83,13 @@
       },
       "problemMatcher": [],
       "args": [
-        "lab/live_demo.py",
-        "record"
+        "netlab/labctl.py",
+        "down"
       ]
     },
     {
-      "label": "Start FHIR server",
-      "detail": "Starts HAPI (8080, or 8090 if busy) and waits until ready",
+      "label": "Run unit tests",
+      "detail": "pytest (no Docker, no network, no admin)",
       "type": "process",
       "command": "${workspaceFolder}/.venv/Scripts/python.exe",
       "options": {
@@ -77,28 +102,14 @@
       },
       "problemMatcher": [],
       "args": [
-        "lab/live_demo.py",
-        "start"
-      ]
-    },
-    {
-      "label": "Stop FHIR server",
-      "detail": "Stops the HAPI container",
-      "type": "process",
-      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "clear": true
-      },
-      "problemMatcher": [],
-      "args": [
-        "lab/live_demo.py",
-        "stop"
-      ]
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      }
     }
   ]
 }

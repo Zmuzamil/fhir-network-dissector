@@ -14,7 +14,6 @@ from pathlib import Path
 import pytest
 
 from fhir_dissector import FhirDissector
-from fhir_dissector.cli import dissect_pcap
 from fhir_dissector.cli import main as cli_main
 from lab import evaluate
 from tests.pcap_builder import build_conversation, http_request, http_response, tcp_tuples, write_pcap
@@ -135,13 +134,14 @@ def test_evaluator_detects_mismatch() -> None:
     assert not rep["all_ok"] and rep["interaction_accuracy"] == 0.0
 
 
-@pytest.mark.parametrize("name", ["fhir_hapi", "fhir_mock"])
-def test_real_lab_capture(name: str) -> None:
-    pcap = ROOT / "captures" / "pcaps" / f"{name}.pcap"
-    exp = ROOT / "captures" / "pcaps" / f"{name}_expected.json"
-    if not (pcap.is_file() and exp.is_file()):
-        pytest.skip(f"captures/pcaps/{name}.pcap or its answer key is missing")
-    events = dissect_pcap(pcap, FhirDissector(emit_non_fhir=True))
-    rep = evaluate.evaluate(events, json.loads(exp.read_text(encoding="utf-8")))
-    assert rep["all_ok"], [r for r in rep["rows"] if not r["ok"]]
+@pytest.mark.parametrize("name", ["general", "ward", "laboratory", "icu"])
+def test_real_network_lab_capture(name: str) -> None:
+    """The captures of the network lab (netlab/) must keep a 100 % match with their answer keys."""
+    pcap = ROOT / "captures" / "netlab" / f"{name}.pcap"
+    answer = ROOT / "captures" / "netlab" / f"{name}_expected.jsonl"
+    if not (pcap.is_file() and answer.is_file()):
+        pytest.skip(f"captures/netlab/{name}.pcap or its answer key is missing (run netlab first)")
+    rep = evaluate.evaluate_netlab(pcap, answer)
+    assert rep["all_ok"], [r for r in rep["rows"] if not r["ok"]][:5]
     assert (rep["precision"], rep["recall"], rep["interaction_accuracy"]) == (1.0, 1.0, 1.0)
+    assert rep["max_frame"] <= 1514 and rep["encrypted_seen"] == 0
