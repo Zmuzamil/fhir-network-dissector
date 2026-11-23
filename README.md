@@ -8,7 +8,7 @@ packets → TCP reassembly → HTTP/1.1 parsing → FHIR detection → FHIR clas
 
 FHIR is not a binary protocol: it is a REST API on top of HTTP, with JSON or XML *resources* (`Patient`, `Observation`, `Bundle`, …). The dissector rebuilds the HTTP conversation from TCP segments, decides whether it is FHIR (with an explainable confidence score), and labels the FHIR *interaction* (read, search, create, transaction, …).
 
-**Status:** evaluated on an emulated hospital network (Docker, separate hosts, 1500-byte MTU): 3,762 calls from up to 6 concurrent client systems over 4 scenarios of 5 minutes, with automatic ground truth: **100% precision, 100% recall, 100% interaction accuracy**, 0 false positives (details in section 5).
+**Status:** evaluated on an emulated hospital network (Docker, separate hosts, 1500-byte MTU; plaintext HTTP/1.1; one server implementation, HAPI FHIR R4; designed workflows): 3,627 exchanges from up to 6 concurrent client systems over 4 scenarios of 5 minutes, with automatic ground truth: **100% precision, 100% recall, 100% interaction accuracy**, 0 false positives. Encrypted (HTTPS) traffic is not readable and is reported separately. Robustness to malformed and lost traffic is covered by 192 unit tests. Details in section 5; what this does *not* show is in section 7.
 
 ---
 
@@ -40,7 +40,7 @@ DURATION=60 ./netlab/lab.sh       # everything in one go: unit tests + 4 scenari
 
 ### The network lab (test bed)
 
-[`netlab/`](netlab/README.md) builds a small hospital network in Docker: HAPI FHIR and several systems (EHR, laboratory, bedside monitors, clinician workstations, an intranet server and browser, an HTTPS proxy), each in its own container with its own IP and MAC on the bridge `br-fhir`. A capture container records the bridge; every client writes an answer key; the evaluator compares the dissector with it.
+[`netlab/`](netlab/README.md) builds a small hospital network in Docker: HAPI FHIR and several systems (EHR, laboratory, bedside monitors, clinician workstations, an intranet server and browser, an HTTPS proxy), each in its own container with its own IP and MAC on the bridge `br-fhir`. A capture container records the bridge; every client writes an answer key; the evaluator compares the dissector with it. The network design (one generic node program configured by `.ini` files, one host per system on a shared bridge, TCP offload off, 5-minute captures per scenario) is adapted from our lab's HL7 v2 emulator **hl7-sim**; the FHIR nodes, scenarios, answer keys and evaluation are new.
 
 **Everything in one go** (starts Docker Desktop if needed, runs the unit tests, all 4 scenarios, the evaluation, and prints one verdict `EVERYTHING PASSED`):
 ```powershell
@@ -107,40 +107,44 @@ The core modules do not import scapy, so any packet framework can feed `process_
 
 ## 3. Event schema
 
-One JSON object per line (JSONL). Example (a real event from the lab, redacted by default):
+One JSON object per line (JSONL). Example: a real event from `captures/netlab/general.pcap` (the clinician workstation 10.63.0.25 searching patients by gender and birth date), redacted by default:
 
 ```json
 {
-  "ts": 1795085894.194635,
-  "duration_ms": 8.804,
-  "flow": {"client": "[::1]:56105", "server": "[::1]:8080"},
+  "ts": 1795384281.541915,
+  "duration_ms": 115.66,
+  "flow": {"client": "10.63.0.25:38304", "server": "10.63.0.10:8080"},
   "fhir": {
     "is_fhir": true,
     "confidence": 1.0,
-    "signals": ["content-type", "accept", "xml-namespace", "path-resource", "path-fhir"],
-    "version": "4.0.1",
+    "signals": ["content-type", "accept", "resourceType-body", "path-resource", "path-fhir"],
+    "version": null,
     "base": "/fhir",
-    "interaction": "read",
+    "interaction": "search-type",
     "resource_type": "Patient",
-    "resource_id": "1005",
+    "resource_id": null,
     "version_id": null,
     "operation": null,
-    "search_params": []
+    "search_params": ["gender", "birthdate", "_count"]
   },
-  "request": {"method": "GET", "path": "/fhir/Patient/1005", "content_type": null, "body_size": 0,
+  "request": {"method": "GET", "path": "/fhir/Patient", "content_type": null, "body_size": 0,
               "auth": {"bearer_present": false, "scheme": null}, "resource_type": null, "bundle": null},
-  "response": {"status": 200, "content_type": "application/fhir+xml;charset=UTF-8", "body_size": 213,
-               "resource_type": "Patient", "bundle": null, "outcome_issues": []},
+  "response": {"status": 200, "content_type": "application/fhir+json;charset=UTF-8", "body_size": 578,
+               "resource_type": "Bundle",
+               "bundle": {"type": "searchset", "total": 3, "entry_count": 3, "entry_types": {"Patient": 3},
+                          "request_methods": {}},
+               "outcome_issues": []},
   "errors": []
 }
 ```
+The search values (`gender=female`, the birth date) and the three patients' names are in the traffic but not in the event: only parameter names and counts are kept.
 
 | Field | Meaning |
 |---|---|
 | `ts`, `duration_ms` | first byte of the request; time until the last byte of the response |
 | `flow` | client and server `ip:port` (`[ip]:port` for IPv6) |
 | `fhir.confidence`, `fhir.signals` | detection score (0–1) and the clues that fired |
-| `fhir.version` | from `fhirVersion=` in Content-Type or the server's CapabilityStatement (remembered per server) |
+| `fhir.version` | from `fhirVersion=` in Content-Type or the server's CapabilityStatement (remembered per server); `null` until one of them has been seen |
 | `fhir.interaction` | `capabilities`, `read`, `vread`, `update`, `patch`, `delete`, `create`, `search-type`, `search-system`, `search-compartment`, `history-instance/type/system`, `batch`, `transaction`, `batch/transaction`, `operation`, `conditional-update/patch/delete`, `unknown` |
 | `fhir.compartment` | only for `search-compartment` (e.g. `Patient/1`) |
 | `request.bundle` / `response.bundle` | `{type, total, entry_count, entry_types, request_methods}` |
@@ -162,8 +166,8 @@ One JSON object per line (JSONL). Example (a real event from the lab, redacted b
 | `fhir_dissector/classifier.py` | Segment-based URL analysis with the full R4+R5 resource list. Finds the base (`/fhir`), then maps the remaining segments and the method to the interaction (plan §5.4 table). |
 | `fhir_dissector/body.py` | JSON/XML metadata summary. Never fails. |
 | `fhir_dissector/events.py` | Event assembly and redaction. |
-| `fhir_dissector/dissector.py` | `FhirDissector`: `process_tcp`, `process_packet`, `flush`. Fails soft. |
-| `fhir_dissector/cli.py` | `pcap` (streaming `PcapReader`) and `live` (`sniff`) subcommands, sharing the same code path. |
+| `fhir_dissector/dissector.py` | `FhirDissector`: `process_frame` (fast raw-frame decoder: Ethernet/VLAN, loopback, Linux SLL, raw IP; IPv4/IPv6), `process_tcp`, `process_packet` (scapy), `flush`. Fails soft. |
+| `fhir_dissector/cli.py` | `pcap` (classic PCAP read directly, PCAPNG through scapy) and `live` (capture in a background thread, stops at once on Ctrl+C / SIGTERM) subcommands, sharing the same code path. |
 
 **Capture detail.** Reading and live capture use a 262,144-byte limit (*snaplen*), not scapy's default 65,535: on loopback interfaces TCP segments can reach ~65 KB, and 4 bytes per frame were silently cut in an early test. On a normal network (and in the network lab) frames are at most 1514 bytes.
 
@@ -200,8 +204,8 @@ The traffic covers 11 FHIR interaction types (create, read, vread, update, delet
 
 | Area | Status |
 |---|---|
-| Correctness on plaintext HTTP/1.1 FHIR | ready: 100% on a live HAPI server and on a recorded capture |
-| Robustness (garbage, loss, reordering) | ready: fails soft, fuzz-tested |
+| Correctness on plaintext HTTP/1.1 FHIR | 100% on the emulated hospital network (3,627 exchanges, 4 scenarios, HAPI R4); not yet tested on other servers or real traffic |
+| Robustness (garbage, loss, reordering) | fails soft; covered by unit tests and a 100,000-packet fuzz test (the lab network itself has no loss) |
 | Privacy | ready: redaction on by default; no tokens or resource contents ever written |
 | Resource limits | ready: connections, request queue, body size, header size, out-of-order buffer are all capped |
 | Throughput | fine for one or a few FHIR servers (thousands of packets/s); **not** for multi-Gbit/s core links (single Python process) |
@@ -283,8 +287,9 @@ WantedBy=multi-user.target
 - HTTP/2 (HPACK, streams) and WebSocket subscriptions.
 - HL7 v2 over MLLP as a sibling module.
 - Optional profile validation (e.g. US Core / IPS) and SMART-on-FHIR (OAuth) flow detection.
-- Performance tuning and benchmarks on large captures; tests against other servers (Firely, Microsoft FHIR, IBM LinuxForHealth).
-- Larger, more varied traffic generation (more resource types, PATCH, conditional operations, paging).
+- Independent evaluation: other servers (Blaze, IBM LinuxForHealth, Firely, Microsoft FHIR), a client not written for this project, and labels taken from the server's own access log instead of the clients' answer keys.
+- A harsher lab network: packet loss, delay and reordering (`tc netem`) and a node sending malformed or unusual HTTP (pipelining, chunked/gzip request bodies, aborted connections).
+- Larger, more varied traffic generation (more resource types, PATCH, conditional operations, paging); performance benchmarks on large captures.
 
 ---
 

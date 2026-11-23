@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fhir-dissector"
-version = "0.2.0"
+version = "0.3.0"
 description = "Detect and classify HL7 FHIR exchanges in network traffic (PCAP and live), with privacy-preserving JSON events."
 readme = "README.md"
 requires-python = ">=3.10"
