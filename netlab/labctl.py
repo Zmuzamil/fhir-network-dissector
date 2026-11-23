@@ -7,7 +7,7 @@
     python netlab/labctl.py generate                 every scenario in turn (default 300 s each)
     python netlab/labctl.py evaluate                 evaluate all captures in captures/netlab/
 
-Order of "up" (like hl7-sim's lab-up.sh): network + HAPI, wait until HAPI answers, start the
+Order of "up": network + HAPI, wait until HAPI answers, start the
 capture, then the servers of the scenario (intranet, TLS proxy), then the clients. A scenario
 is a folder netlab/scenari/NAME with one .ini file per node.
 

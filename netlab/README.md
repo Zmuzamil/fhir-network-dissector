@@ -1,6 +1,6 @@
 # netlab: an emulated FHIR hospital network
 
-A small hospital network in Docker, in the style of hl7-sim: several systems exchange HL7 FHIR
+A small hospital network in Docker: several systems exchange HL7 FHIR
 messages (and some ordinary web traffic) with a real FHIR server, each system in its own container
 with its own IP and MAC address on one shared bridge. Everything on the bridge is captured to a PCAP
 file, and every client writes an answer key of the requests it made, so the FHIR dissector can be
@@ -82,7 +82,7 @@ the client really received.
   encrypted: the answer key marks them `encrypted`, and the evaluation reports them separately
   (expected: not visible), never as misses.
 
-Start order (as in hl7-sim's `lab-up.sh`): networks + HAPI → wait until HAPI answers → **start the
+Start order: networks + HAPI → wait until HAPI answers → **start the
 capture** → servers (intranet, proxy) → clients. So the capture contains the clients' connection
 set-up but not the start-up polls. `down` stops the clients first, then the capture, then
 everything else, and merges the answer keys into `captures/netlab/SCENARIO_expected.jsonl`.

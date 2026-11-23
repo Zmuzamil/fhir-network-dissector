@@ -1,4 +1,4 @@
-"""Generic FHIR hospital node for the network lab (netlab), in the style of hl7-sim.
+"""Generic FHIR hospital node for the network lab (netlab).
 
 One program, many systems: an .ini file says what the node is. A node has an identity
 (name, IP, MAC, seed), a default FHIR server, and one or more *flows*: workflows repeated on

@@ -5,8 +5,6 @@ __pycache__/
 captures/*.pcap
 captures/*.pcapng
 captures/*.jsonl
-# third-party reference material (read only)
-reference/
 .pytest_cache/
 captures/netlab/run/
 netlab/compose.scenario.yml

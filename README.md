@@ -40,8 +40,7 @@ DURATION=60 ./netlab/lab.sh       # everything in one go: unit tests + 4 scenari
 
 ### The network lab (test bed)
 
-[`netlab/`](netlab/README.md) builds a small hospital network in Docker: HAPI FHIR and several systems (EHR, laboratory, bedside monitors, clinician workstations, an intranet server and browser, an HTTPS proxy), each in its own container with its own IP and MAC on the bridge `br-fhir`. A capture container records the bridge; every client writes an answer key; the evaluator compares the dissector with it. The network design (one generic node program configured by `.ini` files, one host per system on a shared bridge, TCP offload off, 5-minute captures per scenario) is adapted from our lab's HL7 v2 emulator **hl7-sim**; the FHIR nodes, scenarios, answer keys and evaluation are new.
-
+[`netlab/`](netlab/README.md) builds a small hospital network in Docker: HAPI FHIR and several systems (EHR, laboratory, bedside monitors, clinician workstations, an intranet server and browser, an HTTPS proxy), each in its own container with its own IP and MAC on the bridge `br-fhir`. A capture container records the bridge; every client writes an answer key; the evaluator compares the dissector with it.
 **Everything in one go** (starts Docker Desktop if needed, runs the unit tests, all 4 scenarios, the evaluation, and prints one verdict `EVERYTHING PASSED`):
 ```powershell
 .\netlab\lab.ps1 -Short                   # 60 s per scenario (~12 min); in VS Code: Ctrl+Shift+B
@@ -285,7 +284,6 @@ WantedBy=multi-user.target
 
 - TLS decryption with key log files (`SSLKEYLOGFILE`) or integration with a TLS-terminating proxy.
 - HTTP/2 (HPACK, streams) and WebSocket subscriptions.
-- HL7 v2 over MLLP as a sibling module.
 - Optional profile validation (e.g. US Core / IPS) and SMART-on-FHIR (OAuth) flow detection.
 - Independent evaluation: other servers (Blaze, IBM LinuxForHealth, Firely, Microsoft FHIR), a client not written for this project, and labels taken from the server's own access log instead of the clients' answer keys.
 - A harsher lab network: packet loss, delay and reordering (`tc netem`) and a node sending malformed or unusual HTTP (pipelining, chunked/gzip request bodies, aborted connections).
